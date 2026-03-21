@@ -50,7 +50,6 @@ echo "Report output: $OUTPUT_DIR"
 ```bash
 docker run --rm \
   --name "${SCAN_ID}-download" \
-  --cap-drop ALL \
   --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan" \
   alpine:latest \
@@ -68,7 +67,6 @@ docker run --rm \
 ```bash
 docker run --rm \
   --name "${SCAN_ID}-download" \
-  --cap-drop ALL \
   --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan" \
   alpine:latest \
@@ -92,7 +90,6 @@ Use sparse checkout to fetch only the relevant subtree:
 ```bash
 docker run --rm \
   --name "${SCAN_ID}-download" \
-  --cap-drop ALL \
   --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan" \
   alpine:latest \
