@@ -1,6 +1,6 @@
 # CodeScan — A Claude Skill for Malicious Code Detection
 
-A portable [Agent Skills](https://www.anthropic.com/news/agent-skills) skill that scans a code repository for malicious patterns, suspicious links, and supply-chain attack indicators. Works across Claude.ai, Claude Code, and the Claude API.
+A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans a code repository for malicious patterns, suspicious links, and supply-chain attack indicators. Works across Claude.ai, Claude Code, and the Claude API.
 
 > [!IMPORTANT]
 > **Docker is required.** This skill will not work without Docker installed and running on your machine. All analysis runs inside a disposable Docker container — nothing from the target repo ever touches the host filesystem, and the entire sandbox is destroyed when the scan completes.
@@ -74,8 +74,9 @@ DO NOT INSTALL — ...
 
 ### Claude Code
 ```bash
-# Clone into your Claude skills directory
-git clone https://github.com/tkdtaylor/CodeScan ~/.claude/skills/code-scanner
+# Clone and copy the skill into your Claude skills directory
+git clone https://github.com/tkdtaylor/CodeScan /tmp/CodeScan
+cp -r /tmp/CodeScan/code-scanner ~/.claude/skills/
 ```
 
 ### Claude.ai
@@ -115,7 +116,7 @@ Each analysis step runs in a container with:
 
 ## Contributing
 
-Issues and PRs welcome. See [PLAN.md](PLAN.md) for the development roadmap.
+Issues and PRs welcome.
 
 ## License
 
@@ -123,4 +124,4 @@ This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENS
 
 **Free for:** personal use, research, education, hobby projects, charitable and government organisations.
 
-**Commercial use** (companies, paid products, internal business tooling) requires a separate commercial license. Contact: your@email.com
+**Commercial use** (companies, paid products, internal business tooling) requires a separate commercial license. Contact: kevin@taylorguard.me
