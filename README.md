@@ -87,11 +87,22 @@ DO NOT INSTALL — ...
 
 > **Prerequisite:** Docker must be installed and running. See the requirement note at the top of this page.
 
+### Your preferred Tool
+
+Try asking the tool itself, Claude for example, to install the skill and give it the link to this repo.
+
 ### Claude Code
+**Mac OS / Linux:**
 ```bash
 # Clone and copy the skill into your Claude skills directory
 git clone https://github.com/tkdtaylor/CodeScan /tmp/CodeScan
 cp -r /tmp/CodeScan/code-scanner ~/.claude/skills/
+```
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/tkdtaylor/CodeScan
+Copy-Item -Recurse CodeScan\code-scanner "$env:USERPROFILE\.claude\skills\"
 ```
 
 ### Claude.ai
