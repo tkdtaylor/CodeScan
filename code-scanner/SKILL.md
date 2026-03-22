@@ -15,6 +15,9 @@ Extract the target from the user's message. It will be one of:
 - A GitHub subdirectory URL (e.g. `https://github.com/owner/repo/tree/branch/subdir`)
 - A direct link to a `.zip` or `.tar.gz` archive
 - A local path the user has already downloaded
+- A local path to a skill folder or `SKILL.md` file (e.g. `~/.claude/skills/some-skill/`)
+
+If the target is a skill folder or `SKILL.md` file, follow the **skill scanning** path below. Skill scanning focuses on prompt injection, dangerous embedded commands, and data exfiltration instructions in addition to the standard pattern suite.
 
 If no URL or path is provided, ask: "Please provide the GitHub repository URL or archive link you'd like me to scan."
 
@@ -102,6 +105,27 @@ docker run --rm \
     echo 'Sparse checkout complete.'
   "
 ```
+
+### Copy local skill files into the volume
+
+Use this when the target is a local skill folder or `SKILL.md` file:
+
+```bash
+docker run --rm \
+  --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan" \
+  -v "<LOCAL_SKILL_PATH>:/input:ro" \
+  alpine:latest \
+  sh -c "
+    cp -r /input /scan/repo
+    find /scan/repo -type f -exec chmod ugo-x {} \;
+    echo 'Skill files copied.'
+  "
+```
+
+Replace `<LOCAL_SKILL_PATH>` with the absolute path to the skill folder or file (e.g. `/home/user/.claude/skills/some-skill`).
+
+---
 
 ### In Claude.ai (no shell access)
 
@@ -258,6 +282,64 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEoh 'https?://[^[:space:]'\''\">)}{,]+' /scan/repo 2>/dev/null | sort -u"
 ```
+
+---
+
+## Step 4b: Skill-Specific Analysis (run when target is a skill file or folder)
+
+Skill files are markdown documents that instruct Claude how to behave. Threats here differ from code: instead of executing malicious binaries, a malicious skill manipulates Claude itself. Run these checks in addition to the standard suite above. Consult `references/patterns.md` Category 9 for the full pattern library.
+
+```bash
+# --- Prompt injection keywords ---
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEin \
+    'ignore (all |previous |prior |above |your |these )?(instructions?|guidelines?|rules?|constraints?|training)|
+you are now|your (new |true |actual |real |primary |only |secret )?(role|purpose|identity|directive|goal|instruction)|
+disregard|override|bypass|jailbreak|do not follow|forget your|pretend (you are|to be)|act as (if )?you|
+DAN|developer mode|unrestricted mode|no restrictions|without restrictions|safety (guidelines?|training|filters?) (do not|does not|not) apply|
+this (skill|command|prompt|instruction) (has been|is) (verified|approved|authorized|trusted|certified) by anthropic' \
+    /scan/repo 2>/dev/null | head -40"
+
+# --- Data exfiltration instructions ---
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEin \
+    'send (the |all |this |conversation|user|message|history|content|data|output)|
+(post|transmit|upload|exfiltrat|forward).{0,60}(http|url|endpoint|server|remote)|
+include.{0,60}(conversation|history|message|api.?key|token|secret|password).{0,60}(request|url|http)|
+(curl|wget|fetch).{0,80}(secret|key|token|password|credential|env|\.ssh|\.aws)' \
+    /scan/repo 2>/dev/null | head -40"
+
+# --- Credential access instructions ---
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEin \
+    '(read|open|cat|show|display|access|retrieve|get|fetch).{0,60}(\.ssh|\.aws|\.env|\.netrc|id_rsa|id_ed25519|credentials|api.?key|secret.?key|private.?key)|
+(~|HOME|\/home\/|\/root\/)\/.*(\.ssh|\.aws|credentials|\.netrc)|
+\/etc\/(passwd|shadow|sudoers)' \
+    /scan/repo 2>/dev/null | head -40"
+
+# --- Dangerous commands embedded in skill instructions ---
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEin \
+    'curl.{0,40}\|.{0,10}(bash|sh)|wget.{0,40}\|.{0,10}(bash|sh)|bash\s*<\(curl|
+rm\s+-rf\s+\/|chmod\s+(777|u\+s|4755)|crontab|\/etc\/cron|systemctl (enable|start)|
+npm install -g|pip install|eval\(|exec\(' \
+    /scan/repo 2>/dev/null | head -40"
+
+# --- Permission or identity claims ---
+docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEin \
+    '(you have been granted|you now have|this (gives|grants) you).{0,60}(access|permission|privilege|ability|right)|
+(anthropic|claude|system).{0,30}(authorized|approved|verified|certified|allow)|
+(admin|root|superuser|elevated).{0,30}(access|mode|privilege)' \
+    /scan/repo 2>/dev/null | head -30"
+```
+
+For every finding from the skill-specific checks, record severity using `references/patterns.md` Category 9 guidance.
 
 ---
 
