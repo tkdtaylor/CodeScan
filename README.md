@@ -39,6 +39,7 @@ Given a GitHub repository URL, a zip archive, or a local skill folder, this skil
 ## What it detects
 
 **Code repositories and archives:**
+- **Known CVEs** — dependency vulnerabilities checked against the [OSV database](https://osv.dev) (via [OSV Scanner](https://github.com/google/osv-scanner))
 - **Obfuscation** — base64/hex encoded payloads, eval/exec patterns
 - **Download & execute** — `curl | bash`, `wget | sh`, fetching and running remote scripts
 - **Supply chain hooks** — malicious `postinstall`, `setup.py`, `__init__.py` install triggers

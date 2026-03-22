@@ -28,6 +28,45 @@ docker info > /dev/null 2>&1 && echo "Docker available" || echo "Docker not runn
 
 ---
 
+## Step 1b: Pre-flight Size Check
+
+Before creating the sandbox, check the download size. **Do not proceed if the target exceeds 2 GB. Warn and ask the user to confirm if it exceeds 500 MB.**
+
+### GitHub repository or subdirectory URL
+
+```bash
+# Extract owner/repo from the URL and query the GitHub API
+curl -s "https://api.github.com/repos/<OWNER>/<REPO>" \
+  | grep '"size"' | head -1
+# Size is returned in KB. Divide by 1024 for MB.
+```
+
+Interpret the result:
+- **`size` missing or API rate-limited** — warn the user you could not verify the size, ask if they want to proceed
+- **< 512000 KB (500 MB)** — proceed
+- **512000–2097152 KB (500 MB – 2 GB)** — warn: *"This repo is approximately X MB. Scans on large repos can take several minutes and use significant disk space. Proceed?"* Wait for confirmation.
+- **> 2097152 KB (2 GB)** — stop: *"This repo is approximately X GB, which exceeds the 2 GB scan limit. Please clone it locally and provide the local path instead."*
+
+### Archive URL (zip / tar.gz)
+
+```bash
+# Check Content-Length header — no download occurs
+curl -sI "<ARCHIVE_URL>" | grep -i content-length
+# Value is in bytes. Divide by 1048576 for MB.
+```
+
+Apply the same 500 MB / 2 GB thresholds. If `Content-Length` is absent, warn the user and ask to confirm before proceeding.
+
+### Local path
+
+```bash
+du -sh "<LOCAL_PATH>"
+```
+
+Apply the same thresholds. For skill files this check can be skipped — they are always small.
+
+---
+
 ## Step 2: Set Up the Docker Sandbox
 
 Create a named Docker volume and a dedicated output directory. **All repo content stays inside the volume — it never touches the host filesystem.**
@@ -189,6 +228,29 @@ Report this map to the user before proceeding.
 ## Step 4: Static Analysis — Scan for Malicious Patterns
 
 All analysis runs in containers with `--network none`. Consult `references/patterns.md` for the full pattern library.
+
+### OSV Scanner — Known Vulnerability Check
+
+Run this first. OSV Scanner checks all dependency manifests (`package-lock.json`, `go.sum`, `requirements.txt`, `Cargo.lock`, etc.) against the [Open Source Vulnerabilities](https://osv.dev) database. This requires brief network access to query the OSV API — only dependency metadata is sent, no repo code.
+
+```bash
+docker run --rm \
+  --security-opt no-new-privileges \
+  --memory 512m \
+  -v "${SCAN_ID}:/scan:ro" \
+  ghcr.io/google/osv-scanner:latest \
+  --recursive /scan/repo \
+  --format json 2>/dev/null \
+  | jq '.results[]?.packages[]? | {package: .package, vulns: [.vulnerabilities[]? | {id: .id, severity: (.severity // "UNKNOWN"), summary: (.summary // "")}]}' 2>/dev/null \
+  || echo "No vulnerabilities found or OSV scan produced no output."
+```
+
+For every OSV finding, record severity as:
+- **CRITICAL/HIGH** — CVSS 7.0+ or any vulnerability with a known exploit
+- **MEDIUM** — CVSS 4.0–6.9
+- **LOW** — CVSS below 4.0 or unscored
+
+Include the CVE/GHSA ID, affected package and version, and the fix version if available.
 
 For every finding, record:
 - **Severity**: CRITICAL / HIGH / MEDIUM / LOW / INFO
