@@ -61,7 +61,7 @@ Given a GitHub repository URL, a zip archive, or a local skill folder, this skil
 
 ## Output
 
-The skill writes a Markdown report to `./codescan-reports/scan-report-YYYYMMDD-HHMMSS.md`:
+You can see a sample report here [/sample-reports/scan-report-20260322.md](./sample-reports/scan-report-20260322.md). The skill writes a Markdown report to `./codescan-reports/scan-report-YYYYMMDD-HHMMSS.md`:
 
 ```markdown
 # Code Scan Report
