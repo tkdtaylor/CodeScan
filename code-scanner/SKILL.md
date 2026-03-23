@@ -21,6 +21,8 @@ If the target is a skill folder or `SKILL.md` file, follow the **skill scanning*
 
 If no URL or path is provided, ask: "Please provide the GitHub repository URL or archive link you'd like me to scan."
 
+Also check the user's message for the `--security-review` flag. If present, set `FORCE_SECURITY_REVIEW=true`. This overrides the default behaviour of skipping the Claude Code security review when HIGH or CRITICAL findings are present.
+
 Confirm Docker is available before proceeding:
 ```bash
 docker info > /dev/null 2>&1 && echo "Docker available" || echo "Docker not running — please start Docker Desktop or the Docker daemon"
@@ -474,7 +476,72 @@ Every CRITICAL and HIGH finding must include:
 
 ---
 
-## Step 8: Destroy the Sandbox
+## Step 8: Claude Code Security Review (conditional)
+
+This step uses Claude Code's built-in security analysis to review the scanned source code directly. It runs **after** the sandbox-based analysis so it only adds signal — it never sees code that was already flagged as confirmed malicious.
+
+**Run this step if either condition is true:**
+- No CRITICAL or HIGH findings were found in Steps 4–6
+- The user included `--security-review` in their request (`FORCE_SECURITY_REVIEW=true`)
+
+**Skip this step if:**
+- CRITICAL or HIGH findings exist **and** `FORCE_SECURITY_REVIEW` is not set
+- This skill is running in Claude.ai or any environment without Claude Code shell access
+
+**Why the gate exists:** Exporting code to the host filesystem when the repo is already confirmed malicious serves no purpose and unnecessarily touches the host. The `--security-review` flag lets the user override this for research or curiosity purposes.
+
+### Export the repo to a temporary host directory
+
+```bash
+TEMP_DIR=$(mktemp -d /tmp/codescan-review-XXXXXX)
+docker run --rm \
+  --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" \
+  -v "${TEMP_DIR}:/output" \
+  alpine:latest \
+  sh -c "cp -r /scan/repo/. /output/ && find /output -type f -exec chmod ugo-x {} \;"
+echo "Exported to: $TEMP_DIR"
+```
+
+### Run the security review
+
+With the files now accessible on the host, read the key source files directly and apply Claude Code's security analysis — the same checks the `/security-review` command performs:
+
+- **SQL injection** — string concatenation into queries, unparameterised inputs
+- **XSS** — unsanitised output to HTML, unsafe `innerHTML` / `dangerouslySetInnerHTML`
+- **Authentication and authorisation flaws** — missing auth checks, hardcoded credentials, insecure session handling
+- **Insecure data handling** — unvalidated input, unsafe deserialisation, cleartext secrets
+- **Dependency vulnerabilities** — anything missed by OSV (version ranges, indirect deps)
+
+Focus on entry points, request handlers, authentication code, and any file that directly handles user input. Read files using your file tools — do not execute anything.
+
+### Append findings to the report
+
+Add a new section to the saved report file:
+
+```bash
+cat >> "$REPORT_FILE" << 'REVIEW'
+
+---
+
+## Claude Code Security Review
+
+*Run as a supplementary check via Claude Code's built-in security analysis.*
+
+<findings here, or "No additional findings." if clean>
+REVIEW
+```
+
+### Clean up the temp directory
+
+```bash
+rm -rf "$TEMP_DIR"
+echo "Temp directory removed."
+```
+
+---
+
+## Step 9: Destroy the Sandbox
 
 Remove the Docker volume and all its contents — the repo and any fetched payloads are completely gone from the system:
 
@@ -494,5 +561,5 @@ echo "Report is at: $REPORT_FILE"
 - If a file cannot be read (encrypted, corrupted), flag it as UNVERIFIED
 - Do not dismiss a finding as "probably fine" without a specific technical reason
 - When in doubt, escalate severity rather than downgrade
-- Always destroy the volume in Step 8 — do not leave malware on the system
+- Always destroy the volume in Step 9 — do not leave malware on the system
 - The report `.md` file is the only artifact that remains after the scan

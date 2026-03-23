@@ -25,7 +25,8 @@ Given a GitHub repository URL, a zip archive, or a local skill folder, this skil
 3. Statically analyze the code for malicious patterns using `--network none` containers
 4. Follow any embedded download URLs and inspect those payloads inside the sandbox too
 5. Write a structured Markdown report to `./codescan-reports/` on your machine
-6. Destroy the Docker volume — removing all repo content from your system
+6. *(Claude Code only)* If no HIGH or CRITICAL findings were found, run a supplementary review using Claude Code's built-in security analysis and append the results to the report
+7. Destroy the Docker volume — removing all repo content from your system
 
 ## Trigger phrases
 
@@ -35,6 +36,8 @@ Given a GitHub repository URL, a zip archive, or a local skill folder, this skil
 - "Run a security scan on `<url>`"
 - "Scan this skill before I install it: `<path or url>`"
 - "Is this Claude skill safe to use?"
+
+Add `--security-review` to any phrase to force the Claude Code security review step even if HIGH or CRITICAL findings are present — e.g. `"Scan https://github.com/... --security-review"`.
 
 ## What it detects
 
@@ -184,13 +187,19 @@ Host machine
 ├── ./codescan-reports/        ← report .md files written here (host)
 │   └── scan-report-*.md
 │
+├── /tmp/codescan-review-*/    ← temp dir for Claude Code review (if run)
+│   └── ...                    ← non-executable copy, deleted after review
+│
 └── Docker volume: codescan-TIMESTAMP  ← all repo content stays here
     └── /scan/repo/            ← cloned repository (non-executable)
         └── ...                ← never touches the host filesystem
 
 After scan: docker volume rm codescan-TIMESTAMP
-            → volume and all contents permanently deleted
+            rm -rf /tmp/codescan-review-*
+            → all content permanently deleted
 ```
+
+The temp directory is only created when the Claude Code security review runs (no HIGH/CRITICAL findings, or `--security-review` flag). Files are copied with execute permissions stripped and deleted immediately after the review.
 
 Each analysis step runs in a container with:
 - `--network none` — no outbound connections during analysis
