@@ -114,7 +114,14 @@ Copy-Item -Recurse CodeScan\code-scanner "$env:USERPROFILE\.claude\skills\"
 3. Upload the zip
 
 ### Google Antigravity
-Antigravity has native Agent Skills support. Check [antigravity.google/docs/agent/skills](https://antigravity.google/docs/agent/skills) for the exact install path — the skill format is compatible. Docker commands run automatically via the integrated terminal.
+Antigravity has native Agent Skills support. Check [https://antigravity.google/docs/skills](https://antigravity.google/docs/skills) for the exact install path — the skill format is compatible. Docker commands run automatically via the integrated terminal.
+
+1. Create a new folder in your workspace at <workspace-root>/.agents/skills/code-scanner/ (or if you prefer global, ~/.gemini/antigravity/skills/code-scanner/)
+2. Copy `code-scanner/SKILL.md` to `./skills/code-scanner/SKILL.md`
+3. Copy all files in `code-scanner/references/` to `./skills/code-scanner/references/`
+4. Create a new folder `examples` at `./skills/code-scanner/` (./skills/code-scanner/examples/)
+5. Copy the file in `code-scanner/sample-reports/` to `./skills/code-scanner/examples/`
+6. Switch agent to **Planning Mode** and trigger with a phrase from the [Trigger phrases](#trigger-phrases) section
 
 ### GitHub Copilot (Agent Mode)
 Copilot does not have a native skill format, but Agent Mode can execute terminal commands, so the full Docker-based scan runs automatically.
