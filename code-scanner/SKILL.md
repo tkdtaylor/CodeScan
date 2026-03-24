@@ -178,7 +178,7 @@ SCAN_ID="codescan-$(date +%s)"
 docker volume create "$SCAN_ID"
 mkdir -p ./codescan-reports
 
-docker run --rm --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan" alpine:latest \
   sh -c "apk add -q git && git clone --depth=1 <URL> /scan/repo && \
          find /scan/repo -type f -exec chmod ugo-x {} \;"
@@ -197,7 +197,6 @@ Run a structure overview **inside the volume, with no network access**:
 ```bash
 docker run --rm \
   --network none \
-  --cap-drop ALL \
   --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" \
   alpine:latest \
@@ -279,7 +278,6 @@ Run each grep inside a `--network none` container. Repeat this pattern for each 
 ```bash
 docker run --rm \
   --network none \
-  --cap-drop ALL \
   --security-opt no-new-privileges \
   --memory 512m \
   -v "${SCAN_ID}:/scan:ro" \
@@ -293,43 +291,43 @@ Run these in sequence:
 
 ```bash
 # --- Download and execute ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEn 'curl.+\|.+sh|wget.+\|.+sh|bash\s*<\(curl|IEX.+Download|fetch.+exec' \
          /scan/repo 2>/dev/null | head -30"
 
 # --- Obfuscation ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEn 'eval\(base64|exec\(base64|atob\(|fromCharCode|\\\\x[0-9a-f]{2}' \
          /scan/repo 2>/dev/null | head -30"
 
 # --- Supply chain hooks (package.json) ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rn 'postinstall\|preinstall\|\"install\"' /scan/repo \
          --include='package.json' 2>/dev/null"
 
 # --- Supply chain hooks (Python) ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rn 'cmdclass\|setup_requires\|CustomInstall\|subprocess' /scan/repo \
          --include='setup.py' --include='setup.cfg' 2>/dev/null"
 
 # --- Credential harvesting ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEn 'process\.env\.|os\.environ|getenv\(|HOME.*\.ssh|\.aws/credentials|\.netrc' \
          /scan/repo 2>/dev/null | head -30"
 
 # --- Reverse shells ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEn '/dev/tcp|/dev/udp|nc\s+-e|ncat.*-e|socat.*exec|bash\s+-i|sh\s+-i' \
          /scan/repo 2>/dev/null | head -30"
 
 # --- Binary strings (for compiled/binary files) ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "apk add -q binutils 2>/dev/null
          find /scan/repo -type f | while read f; do
@@ -342,7 +340,7 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
          done"
 
 # --- Embedded URLs ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEoh 'https?://[^[:space:]'\''\">)}{,]+' /scan/repo 2>/dev/null | sort -u"
 ```
@@ -355,7 +353,7 @@ Skill files are markdown documents that instruct Claude how to behave. Threats h
 
 ```bash
 # --- Prompt injection keywords ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEin \
     'ignore (all |previous |prior |above |your |these )?(instructions?|guidelines?|rules?|constraints?|training)|
@@ -366,7 +364,7 @@ this (skill|command|prompt|instruction) (has been|is) (verified|approved|authori
     /scan/repo 2>/dev/null | head -40"
 
 # --- Data exfiltration instructions ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEin \
     'send (the |all |this |conversation|user|message|history|content|data|output)|
@@ -376,7 +374,7 @@ include.{0,60}(conversation|history|message|api.?key|token|secret|password).{0,6
     /scan/repo 2>/dev/null | head -40"
 
 # --- Credential access instructions ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEin \
     '(read|open|cat|show|display|access|retrieve|get|fetch).{0,60}(\.ssh|\.aws|\.env|\.netrc|id_rsa|id_ed25519|credentials|api.?key|secret.?key|private.?key)|
@@ -385,7 +383,7 @@ docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
     /scan/repo 2>/dev/null | head -40"
 
 # --- Dangerous commands embedded in skill instructions ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEin \
     'curl.{0,40}\|.{0,10}(bash|sh)|wget.{0,40}\|.{0,10}(bash|sh)|bash\s*<\(curl|
@@ -394,7 +392,7 @@ npm install -g|pip install|eval\(|exec\(' \
     /scan/repo 2>/dev/null | head -40"
 
 # --- Permission or identity claims ---
-docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+docker run --rm --network none --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" alpine:latest \
   sh -c "grep -rEin \
     '(you have been granted|you now have|this (gives|grants) you).{0,60}(access|permission|privilege|ability|right)|
@@ -423,7 +421,6 @@ For each **suspicious** or **download target** URL, fetch it into the volume (no
 ```bash
 # Fetch secondary payload (limited network, sandboxed)
 docker run --rm \
-  --cap-drop ALL \
   --security-opt no-new-privileges \
   --memory 256m \
   -v "${SCAN_ID}:/scan" \
@@ -439,7 +436,6 @@ docker run --rm \
 # Analyze it with no network
 docker run --rm \
   --network none \
-  --cap-drop ALL \
   --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" \
   alpine:latest \
@@ -499,9 +495,15 @@ docker run --rm \
   -v "${SCAN_ID}:/scan:ro" \
   -v "${TEMP_DIR}:/output" \
   alpine:latest \
-  sh -c "cp -r /scan/repo/. /output/ && find /output -type f -exec chmod ugo-x {} \;"
+  sh -c "
+    cp -r /scan/repo/. /output/
+    chmod -R a+rX /output
+    find /output -type f -exec chmod a-x {} \;
+  "
 echo "Exported to: $TEMP_DIR"
 ```
+
+The `chmod -R a+rX /output` step is critical — it explicitly grants read permission for all users on every file and directory before stripping execute bits. Without this, files copied from a Docker volume may be root-owned with restrictive permission bits, making them unreadable by the host user.
 
 ### Run the security review
 
@@ -534,7 +536,14 @@ REVIEW
 
 ### Clean up the temp directory
 
+Files in the temp directory are owned by root (Docker's default user), so a plain `rm -rf` will fail. Use Docker to remove them:
+
 ```bash
+docker run --rm \
+  --security-opt no-new-privileges \
+  -v "${TEMP_DIR}:/cleanup" \
+  alpine:latest \
+  sh -c "chmod -R u+w /cleanup && rm -rf /cleanup/*"
 rm -rf "$TEMP_DIR"
 echo "Temp directory removed."
 ```
@@ -556,8 +565,11 @@ echo "Report is at: $REPORT_FILE"
 ## Behavioral Rules
 
 - **Never execute any downloaded code**, even to test it
-- All analysis containers must use `--network none` except the download step
-- All analysis containers must use `--cap-drop ALL` and `--security-opt no-new-privileges`
+- All analysis containers must use `--network none` except the download step and secondary payload fetch
+- All containers must use `--security-opt no-new-privileges`
+- Do **not** use `--cap-drop ALL` on analysis containers — dropping `CAP_DAC_READ_SEARCH` prevents reading volume files with restrictive permission bits, causing grep to silently return no results. Isolation is provided by `--network none`, `--security-opt no-new-privileges`, and non-executable files.
+- When exporting files to the host for the Step 8 security review, always run `chmod -R a+rX` inside the container before the host reads them — Docker-created files are root-owned and may be unreadable by the host user otherwise
+- When cleaning up the temp directory, use a Docker container to `rm -rf` the root-owned files — a plain `rm -rf` from the host will fail with permission denied
 - If a file cannot be read (encrypted, corrupted), flag it as UNVERIFIED
 - Do not dismiss a finding as "probably fine" without a specific technical reason
 - When in doubt, escalate severity rather than downgrade

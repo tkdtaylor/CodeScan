@@ -210,7 +210,6 @@ The temp directory is only created when the Claude Code security review runs (no
 
 Each analysis step runs in a container with:
 - `--network none` — no outbound connections during analysis
-- `--cap-drop ALL` — no Linux capabilities
 - `--security-opt no-new-privileges` — no privilege escalation
 
 ## Contributing
