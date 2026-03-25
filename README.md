@@ -168,21 +168,6 @@ cp -r code-scanner/references .kiro/steering/
 
 Kiro's agent can execute terminal commands, so the full Docker-based scan runs automatically.
 
-### ChatGPT
-ChatGPT cannot execute Docker commands directly. Claude will provide each Docker command for you to run manually in your terminal.
-
-1. Go to [chatgpt.com](https://chatgpt.com) → your profile → **My GPTs** → **Create a GPT**
-2. In the **Instructions** field, paste the full contents of `code-scanner/SKILL.md`
-3. Also paste the contents of `code-scanner/references/patterns.md` and `code-scanner/references/report-template.md` into the **Knowledge** section (upload as files)
-4. Save and use the trigger phrases to start a scan — ChatGPT will give you Docker commands to run in your terminal
-
-### Google Gemini (Gems)
-Gemini Gems cannot execute Docker commands directly. Gemini will provide each Docker command for you to run manually in your terminal.
-
-1. Go to [gemini.google.com](https://gemini.google.com) → **Gems** → **New Gem**
-2. Paste the full contents of `code-scanner/SKILL.md` into the instructions field
-3. Upload `references/patterns.md` and `references/report-template.md` as knowledge files
-4. Save and use the trigger phrases to start a scan — Gemini will give you Docker commands to run in your terminal
 
 ## Skill structure
 
