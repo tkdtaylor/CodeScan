@@ -131,13 +131,17 @@ Antigravity has native Agent Skills support. Check [https://antigravity.google/d
 6. Switch agent to **Planning Mode** and trigger with a phrase from the [Trigger phrases](#trigger-phrases) section
 
 ### GitHub Copilot (Agent Mode)
-Copilot does not have a native skill format, but Agent Mode can execute terminal commands, so the full Docker-based scan runs automatically.
+GitHub Copilot has native Agent Skills support (shipped December 2025). The SKILL.md format is compatible — install it at `.github/skills/` and Copilot will load it automatically when the task matches, without polluting every other chat request.
 
-1. Open your workspace in VS Code with the GitHub Copilot extension
-2. Create `.github/copilot-instructions.md` if it doesn't exist
-3. Paste the full contents of `code-scanner/SKILL.md` into that file
-4. Also add `code-scanner/references/patterns.md` and `code-scanner/references/report-template.md` somewhere accessible in your workspace and update any relative paths in the instructions to match
-5. Switch Copilot to **Agent Mode** and trigger with a phrase from the [Trigger phrases](#trigger-phrases) section
+```bash
+mkdir -p .github/skills/code-scanner
+cp code-scanner/SKILL.md .github/skills/code-scanner/
+cp -r code-scanner/references .github/skills/code-scanner/
+```
+
+Use **Agent Mode** in VS Code and trigger with a phrase from the [Trigger phrases](#trigger-phrases) section. Copilot will ask for confirmation before running each Docker command — click **Continue** or enable **Bypass Approvals** in the Copilot settings to allow all commands automatically.
+
+> **Troubleshooting:** If Docker commands appear to hang indefinitely, this is a known VS Code shell integration issue with ZSH themes (especially Powerlevel10k). Copilot uses shell prompt markers to detect when a command has finished — custom themes overwrite these markers. Switch the integrated terminal to Bash, or disable `RPS1` in your ZSH theme config.
 
 ### Cursor
 Cursor Agent can execute terminal commands, so the full Docker-based scan runs automatically.
