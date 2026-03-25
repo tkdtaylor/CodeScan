@@ -18,7 +18,7 @@ A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans
 
 ## What it does
 
-Given a GitHub repository URL, a zip archive, or a local skill folder, this skill instructs Claude to:
+Given a GitHub repository URL, a zip archive, a PyPI or npm package name, or a local skill folder, this skill instructs Claude to:
 
 1. Create an isolated Docker volume and download the code into it
 2. Strip all execute permissions before any analysis begins
@@ -34,6 +34,8 @@ Given a GitHub repository URL, a zip archive, or a local skill folder, this skil
 - "Check if this GitHub repo is malicious: `<url>`"
 - "Is it safe to install this? `<url>`"
 - "Run a security scan on `<url>`"
+- "Scan the PyPI package `litellm==1.82.8` before I install it"
+- "Check the npm package `express@4.18.2` for malware"
 - "Scan this skill before I install it: `<path or url>`"
 - "Is this Claude skill safe to use?"
 
@@ -41,17 +43,22 @@ Add `--security-review` to any phrase to force the Claude Code security review s
 
 ## What it detects
 
-**Code repositories and archives:**
+**Code repositories, archives, and published packages (PyPI / npm):**
+
+> **Scanning the GitHub source repo is not the same as scanning the published package.** Supply chain attacks like the March 2026 LiteLLM compromise inject malicious code only into the PyPI/npm artifact while leaving the source repo untouched. Use the `litellm==1.82.8` or `npm:package@version` target formats to scan the actual artifact before installing.
+
 - **Known CVEs** — dependency vulnerabilities checked against the [OSV database](https://osv.dev) (via [OSV Scanner](https://github.com/google/osv-scanner))
 - **Obfuscation** — base64/hex encoded payloads, eval/exec patterns
 - **Download & execute** — `curl | bash`, `wget | sh`, fetching and running remote scripts
 - **Supply chain hooks** — malicious `postinstall`, `setup.py`, `__init__.py` install triggers
-- **Credential harvesting** — reading env vars, `.env` files, SSH keys, cloud credentials
+- **Python `.pth` persistence** — executable code in `.pth` files that run on every Python startup (used in the LiteLLM attack)
+- **Credential harvesting** — reading env vars, `.env` files, SSH keys, cloud credentials, cloud instance metadata endpoints (`169.254.169.254`)
 - **Reverse shells** — outbound connection patterns, netcat, socat
 - **Cryptominers** — known miner binaries and pool addresses
 - **Data exfiltration** — sending data to remote endpoints
 - **Suspicious domains/IPs** — hardcoded C2 infrastructure indicators
-- **Privilege escalation** — sudo abuse, SUID bits, cron injection
+- **Persistence mechanisms** — systemd user services, launchd agents, cron injection, SUID bits, sudo abuse
+- **Unpinned CI/CD actions** — third-party GitHub Actions using mutable version tags instead of commit SHAs (the Trivy/LiteLLM attack vector)
 - **Recursive payloads** — secondary download URLs fetched and inspected inside the sandbox
 
 **Claude skill files:**

