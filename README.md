@@ -1,6 +1,6 @@
 # CodeScan — A Claude Skill for Malicious Code Detection
 
-A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans a code repository for malicious patterns, suspicious links, and supply-chain attack indicators. Works across Claude.ai, Claude Code, and the Claude API.
+A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans a code repository for malicious patterns, suspicious links, and supply-chain attack indicators. Works across Claude Code, GitHub Copilot, Cursor, Windsurf, Kiro, and Google Antigravity.
 
 > [!IMPORTANT]
 > **Docker is required.** This skill will not work without Docker installed and running on your machine. All analysis runs inside a disposable Docker container — nothing from the target repo ever touches the host filesystem, and the entire sandbox is destroyed when the scan completes.
@@ -114,11 +114,6 @@ cp -r /tmp/CodeScan/code-scanner ~/.claude/skills/
 git clone https://github.com/tkdtaylor/CodeScan
 Copy-Item -Recurse CodeScan\code-scanner "$env:USERPROFILE\.claude\skills\"
 ```
-
-### Claude.ai
-1. Download or zip this repository's `code-scanner/` folder
-2. Go to Settings → Capabilities → Skills
-3. Upload the zip
 
 ### Google Antigravity
 Antigravity has native Agent Skills support. Check [https://antigravity.google/docs/skills](https://antigravity.google/docs/skills) for the exact install path — the skill format is compatible. Docker commands run automatically via the integrated terminal.
