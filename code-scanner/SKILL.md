@@ -14,8 +14,12 @@ Extract the target from the user's message. It will be one of:
 - A GitHub repository URL (e.g. `https://github.com/owner/repo`)
 - A GitHub subdirectory URL (e.g. `https://github.com/owner/repo/tree/branch/subdir`)
 - A direct link to a `.zip` or `.tar.gz` archive
+- A PyPI package with version (e.g. `litellm==1.82.8` or `pypi:litellm==1.82.8`)
+- An npm package with version (e.g. `npm:express@4.18.2`)
 - A local path the user has already downloaded
 - A local path to a skill folder or `SKILL.md` file (e.g. `~/.claude/skills/some-skill/`)
+
+> **Source repo ≠ published package.** Scanning a GitHub repository does not validate the corresponding PyPI or npm artifact. Supply chain attacks (such as the March 2026 LiteLLM compromise) inject malicious code only into the published package while leaving the source repo clean. When evaluating whether a package is safe to `pip install` or `npm install`, always scan the package artifact directly using the PyPI/npm targets above, not the GitHub source.
 
 If the target is a skill folder or `SKILL.md` file, follow the **skill scanning** path below. Skill scanning focuses on prompt injection, dangerous embedded commands, and data exfiltration instructions in addition to the standard pattern suite.
 
@@ -144,6 +148,48 @@ docker run --rm \
     find /scan/repo -type f -exec chmod ugo-x {} \;
     find /scan/repo -type d -exec chmod ugo-rwx {} \;
     echo 'Sparse checkout complete.'
+  "
+```
+
+### Download a PyPI package into the volume
+
+Use this when the target is a PyPI package name and version (e.g. `litellm==1.82.8`). This downloads the actual published artifact — the wheel or sdist that `pip install` would fetch — not the GitHub source.
+
+```bash
+docker run --rm \
+  --name "${SCAN_ID}-download" \
+  --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan" \
+  python:3.12-alpine \
+  sh -c "
+    pip download --no-deps '<PACKAGE>==<VERSION>' -d /tmp/pkgs 2>&1
+    mkdir -p /scan/repo
+    # Extract wheel (.whl is a zip) or sdist (.tar.gz)
+    for f in /tmp/pkgs/*.whl; do [ -f \"\$f\" ] && unzip -q \"\$f\" -d /scan/repo; done
+    for f in /tmp/pkgs/*.tar.gz; do [ -f \"\$f\" ] && tar -xf \"\$f\" -C /scan/repo; done
+    find /scan/repo -type f -exec chmod ugo-x {} \;
+    find /scan/repo -type d -exec chmod ugo-rwx {} \;
+    echo 'PyPI package download complete.'
+  "
+```
+
+### Download an npm package into the volume
+
+Use this when the target is an npm package name and version (e.g. `express@4.18.2`). This downloads the tarball that `npm install` would fetch.
+
+```bash
+docker run --rm \
+  --name "${SCAN_ID}-download" \
+  --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan" \
+  node:20-alpine \
+  sh -c "
+    mkdir -p /scan/repo
+    cd /tmp && npm pack '<PACKAGE>@<VERSION>' 2>&1
+    for f /tmp/*.tgz; do [ -f \"\$f\" ] && tar -xf \"\$f\" -C /scan/repo; done
+    find /scan/repo -type f -exec chmod ugo-x {} \;
+    find /scan/repo -type d -exec chmod ugo-rwx {} \;
+    echo 'npm package download complete.'
   "
 ```
 
@@ -338,6 +384,31 @@ docker run --rm --network none --security-opt no-new-privileges \
              ;;
            esac
          done"
+
+# --- Python .pth persistence (runs on every Python startup after install) ---
+docker run --rm --network none --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "find /scan/repo -name '*.pth' 2>/dev/null | while read f; do
+    grep -qE 'import|exec|subprocess|os\.' \"\$f\" 2>/dev/null && echo \"SUSPICIOUS .pth: \$f\" && cat \"\$f\"
+  done || true"
+
+# --- Cloud metadata endpoint access (credential harvesting in cloud/CI environments) ---
+docker run --rm --network none --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEn '169\.254\.169\.254|fd00:ec2::254|metadata\.google\.internal|metadata\.azure\.com' \
+         /scan/repo 2>/dev/null | head -20"
+
+# --- Systemd / launchd persistence ---
+docker run --rm --network none --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEn '\.config/systemd|systemd/user|/etc/systemd|LaunchAgents|LaunchDaemons|systemctl.*(enable|start)|launchctl' \
+         /scan/repo 2>/dev/null | head -20"
+
+# --- GitHub Actions: unpinned third-party actions (mutable tags can be rewritten) ---
+docker run --rm --network none --security-opt no-new-privileges \
+  -v "${SCAN_ID}:/scan:ro" alpine:latest \
+  sh -c "grep -rEn 'uses:\s+[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+@v[0-9]' /scan/repo/.github 2>/dev/null | \
+         grep -vE 'uses:\s+actions/|uses:\s+github/' | head -20"
 
 # --- Embedded URLs ---
 docker run --rm --network none --security-opt no-new-privileges \
