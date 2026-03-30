@@ -71,7 +71,7 @@ Add `--security-review` to any phrase to force the Claude Code security review s
 
 ## Output
 
-You can see a sample report here [/sample-reports/scan-report-20260322.md](./sample-reports/scan-report-20260322.md). The skill writes a Markdown report to `./codescan-reports/scan-report-YYYYMMDD-HHMMSS.md`:
+You can see sample reports here: [SAFE — BHIL toolkit](./sample-reports/scan-report-20260322.md) · [CRITICAL — obfuscated backdoor + private key exfiltration](./sample-reports/scan-report-20260330.md). The skill writes a Markdown report to `./codescan-reports/scan-report-YYYYMMDD-HHMMSS.md`:
 
 ```markdown
 # Code Scan Report
@@ -174,7 +174,8 @@ Kiro's agent can execute terminal commands, so the full Docker-based scan runs a
 code-scanner/           ← skill folder (upload this)
 ├── SKILL.md            ← main skill file (required)
 └── references/
-    ├── patterns.md     ← malicious pattern reference library
+    ├── patterns.md        ← malicious pattern reference library
+    ├── scan-commands.md   ← Docker run commands for each scan step
     └── report-template.md ← output format template
 ```
 
