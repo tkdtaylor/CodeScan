@@ -203,7 +203,7 @@ Requires the `dep-scan:latest` Docker image — see build instructions below. If
 docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .
 ```
 
-The Dockerfile clones [dep-scan](https://github.com/tkdtaylor/dep-scan) from GitHub and compiles it in a multi-stage Rust build. No local checkout required — just run the command from the CodeScan repo root.
+The Dockerfile downloads a prebuilt [dep-scan](https://github.com/tkdtaylor/dep-scan) binary from GitHub Releases. No Rust toolchain required — builds in seconds.
 
 Verify the image exists before running:
 ```bash
