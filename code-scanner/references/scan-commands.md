@@ -7,10 +7,11 @@ All Docker run commands for the code-scanner skill. Read this file at the start 
 2. [Download Commands](#download-commands)
 3. [Structure Map](#structure-map)
 4. [OSV Scanner](#osv-scanner)
-5. [Standard Scan Suite](#standard-scan-suite)
-6. [Skill-Specific Checks](#skill-specific-checks)
-7. [Secondary Payload Inspection](#secondary-payload-inspection)
-8. [Step 8: Export, Review, Cleanup](#step-8-export-review-cleanup)
+5. [Dependency Supply Chain Analysis (dep-scan)](#dependency-supply-chain-analysis-dep-scan)
+6. [Standard Scan Suite](#standard-scan-suite)
+7. [Skill-Specific Checks](#skill-specific-checks)
+8. [Secondary Payload Inspection](#secondary-payload-inspection)
+9. [Step 8: Export, Review, Cleanup](#step-8-export-review-cleanup)
 
 ---
 
@@ -187,6 +188,93 @@ docker run --rm \
 ```
 
 For every OSV finding, record the CVE/GHSA ID, affected package and version, and fix version if available.
+
+---
+
+## Dependency Supply Chain Analysis (dep-scan)
+
+Checks every declared dependency for typosquatting, suspicious package age, maintainer changes, known vulnerabilities, dependency confusion, and malicious install scripts. Goes beyond OSV by querying registry metadata directly.
+
+Requires the `dep-scan:latest` Docker image — see build instructions below. If the image is not available, skip this step and note it in the report.
+
+### One-time setup: build the dep-scan image
+
+```bash
+docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .
+```
+
+The Dockerfile clones [dep-scan](https://github.com/tkdtaylor/dep-scan) from GitHub and compiles it in a multi-stage Rust build. No local checkout required — just run the command from the CodeScan repo root.
+
+Verify the image exists before running:
+```bash
+docker image inspect dep-scan:latest > /dev/null 2>&1 && echo "dep-scan image ready" || echo "dep-scan image not found — build it first or skip this step"
+```
+
+### Run dependency supply chain analysis
+
+This step requires network access to query registry APIs and the OSV database. Do NOT add `--network none`.
+
+```bash
+docker run --rm \
+  --security-opt no-new-privileges \
+  --memory 512m \
+  -v "${SCAN_ID}:/scan:ro" \
+  dep-scan:latest \
+  sh -c '
+    found_any=false
+
+    # npm dependencies (from package.json)
+    for pj in $(find /scan/repo -name package.json -not -path "*/node_modules/*" -not -path "*/.git/*"); do
+      deps=$(jq -r "(.dependencies // {}) + (.devDependencies // {}) | keys[]" "$pj" 2>/dev/null | tr "\n" " ")
+      if [ -n "$deps" ]; then
+        found_any=true
+        echo "=== npm deps from ${pj#/scan/repo/} ==="
+        dep-scan check $deps --registry npm --json 2>&1
+      fi
+    done
+
+    # PyPI dependencies (from requirements*.txt)
+    for req in $(find /scan/repo \( -name "requirements.txt" -o -name "requirements-*.txt" -o -name "requirements_*.txt" \) -not -path "*/.git/*"); do
+      deps=$(grep -v "^\s*#" "$req" | grep -v "^\s*$" | grep -v "^\s*-" | sed "s/[>=<!\[].*//" | sed "s/\s*$//" | tr "\n" " ")
+      if [ -n "$deps" ]; then
+        found_any=true
+        echo "=== PyPI deps from ${req#/scan/repo/} ==="
+        dep-scan check $deps --registry pypi --json 2>&1
+      fi
+    done
+
+    # PyPI dependencies (from pyproject.toml — extract [project.dependencies])
+    for pp in $(find /scan/repo -name "pyproject.toml" -not -path "*/.git/*"); do
+      if grep -q "\[project\]" "$pp" 2>/dev/null; then
+        deps=$(sed -n "/^dependencies\s*=/,/^\]/p" "$pp" 2>/dev/null \
+          | grep -oE "\"[a-zA-Z0-9_-]+\"" | tr -d "\"" | tr "\n" " ")
+        if [ -n "$deps" ]; then
+          found_any=true
+          echo "=== PyPI deps from ${pp#/scan/repo/} ==="
+          dep-scan check $deps --registry pypi --json 2>&1
+        fi
+      fi
+    done
+
+    if [ "$found_any" = false ]; then
+      echo "No dependency manifests found (package.json, requirements*.txt, pyproject.toml)."
+    fi
+  '
+```
+
+### Interpreting dep-scan output
+
+dep-scan returns JSON when `--json` is used. Each package entry includes a `result` field and per-policy breakdown:
+
+| dep-scan result | CodeScan severity | Action |
+|-----------------|-------------------|--------|
+| `block` | HIGH | Record as finding — the dependency failed a blocking policy |
+| `warn` | MEDIUM | Record as finding — the dependency triggered a warning |
+| `pass` | — | No action needed |
+
+dep-scan exit code `1` means at least one policy violation was found. Exit code `0` means all clean.
+
+The six policies checked: **age** (< 48h), **install_scripts** (eval/exec/subprocess in hooks), **typosquatting** (Levenshtein distance to popular packages), **vulnerability** (CVEs via OSV.dev), **maintainer_change** (ownership transfers), **dependency_confusion** (internal-looking names on public registries).
 
 ---
 
