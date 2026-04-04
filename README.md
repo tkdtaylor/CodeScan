@@ -22,11 +22,12 @@ Given a GitHub repository URL, a zip archive, a PyPI or npm package name, or a l
 
 1. Create an isolated Docker volume and download the code into it
 2. Strip all execute permissions before any analysis begins
-3. Statically analyze the code for malicious patterns using `--network none` containers
-4. Follow any embedded download URLs and inspect those payloads inside the sandbox too
-5. Write a structured Markdown report to `./codescan-reports/` on your machine
-6. *(Claude Code only)* If no HIGH or CRITICAL findings were found, run a supplementary review using Claude Code's built-in security analysis and append the results to the report
-7. Destroy the Docker volume — removing all repo content from your system
+3. Check dependency manifests against the OSV vulnerability database and *(optionally)* run dep-scan supply chain analysis — typosquatting, package age, maintainer changes, dependency confusion
+4. Statically analyze the code for malicious patterns using `--network none` containers
+5. Follow any embedded download URLs and inspect those payloads inside the sandbox too
+6. Write a structured Markdown report to `./codescan-reports/` on your machine
+7. *(Claude Code only)* If no HIGH or CRITICAL findings were found, run a supplementary review using Claude Code's built-in security analysis and append the results to the report
+8. Destroy the Docker volume — removing all repo content from your system
 
 ## Trigger phrases
 
@@ -48,7 +49,7 @@ Add `--security-review` to any phrase to force the Claude Code security review s
 > **Scanning the GitHub source repo is not the same as scanning the published package.** Supply chain attacks like the March 2026 LiteLLM compromise inject malicious code only into the PyPI/npm artifact while leaving the source repo untouched. Use the `litellm==1.82.8` or `npm:package@version` target formats to scan the actual artifact before installing.
 
 - **Known CVEs** — dependency vulnerabilities checked against the [OSV database](https://osv.dev) (via [OSV Scanner](https://github.com/google/osv-scanner))
-- **Dependency supply chain** *(optional, requires [dep-scan](https://github.com/tkdtaylor/dep-scan) image)* — typosquatting detection, minimum package age enforcement (< 48h), maintainer change/takeover detection, dependency confusion warnings, malicious install script analysis
+- **Dependency supply chain** *(optional)* — typosquatting detection, minimum package age enforcement (< 48h), maintainer change/takeover detection, dependency confusion warnings, malicious install script analysis. Powered by [dep-scan](https://github.com/tkdtaylor/dep-scan) — build the image once: `docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .`
 - **Obfuscation** — base64/hex encoded payloads, eval/exec patterns
 - **Download & execute** — `curl | bash`, `wget | sh`, fetching and running remote scripts
 - **Supply chain hooks** — malicious `postinstall`, `setup.py`, `__init__.py` install triggers
@@ -108,12 +109,18 @@ Try asking the tool itself, Claude for example, to install the skill and give it
 # Clone and copy the skill into your Claude skills directory
 git clone https://github.com/tkdtaylor/CodeScan /tmp/CodeScan
 cp -r /tmp/CodeScan/code-scanner ~/.claude/skills/
+
+# Optional: build the dep-scan image for dependency supply chain analysis
+docker build -t dep-scan:latest -f /tmp/CodeScan/code-scanner/docker/Dockerfile.dep-scan /tmp/CodeScan
 ```
 
 **Windows (PowerShell):**
 ```powershell
 git clone https://github.com/tkdtaylor/CodeScan
 Copy-Item -Recurse CodeScan\code-scanner "$env:USERPROFILE\.claude\skills\"
+
+# Optional: build the dep-scan image for dependency supply chain analysis
+docker build -t dep-scan:latest -f CodeScan\code-scanner\docker\Dockerfile.dep-scan CodeScan
 ```
 
 ### Google Antigravity
