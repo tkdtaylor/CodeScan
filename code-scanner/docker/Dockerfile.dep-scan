@@ -1,16 +1,23 @@
-# Multi-stage build for dep-scan
-# Produces a small alpine image with the dep-scan binary + jq for manifest parsing
-# Clones the source from GitHub — no local checkout required.
+# dep-scan — downloads a prebuilt release binary from GitHub
+# No Rust toolchain needed. Build takes seconds, not minutes.
 #
 # Build:
 #   docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .
 
-FROM rust:1-alpine AS builder
-RUN apk add --no-cache musl-dev git
-WORKDIR /build
-RUN git clone --depth=1 https://github.com/tkdtaylor/dep-scan.git .
-RUN cargo build --release
-
-FROM alpine:latest
-RUN apk add --no-cache ca-certificates jq
-COPY --from=builder /build/target/release/dep-scan /usr/local/bin/dep-scan
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl jq && \
+    rm -rf /var/lib/apt/lists/*
+RUN ARCH=$(uname -m) && \
+    case "$ARCH" in \
+      x86_64|amd64)  TARGET="x86_64-unknown-linux-gnu" ;; \
+      aarch64|arm64)  TARGET="aarch64-unknown-linux-gnu" ;; \
+      *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+    esac && \
+    VERSION=$(curl -fsSL https://api.github.com/repos/tkdtaylor/dep-scan/releases/latest \
+      | grep '"tag_name"' | head -1 | sed 's/.*"\(v[^"]*\)".*/\1/') && \
+    curl -fsSL "https://github.com/tkdtaylor/dep-scan/releases/download/${VERSION}/dep-scan-${VERSION}-${TARGET}.tar.gz" \
+      -o /tmp/dep-scan.tar.gz && \
+    tar xzf /tmp/dep-scan.tar.gz -C /usr/local/bin && \
+    chmod +x /usr/local/bin/dep-scan && \
+    rm /tmp/dep-scan.tar.gz
