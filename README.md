@@ -48,6 +48,7 @@ Add `--security-review` to any phrase to force the Claude Code security review s
 > **Scanning the GitHub source repo is not the same as scanning the published package.** Supply chain attacks like the March 2026 LiteLLM compromise inject malicious code only into the PyPI/npm artifact while leaving the source repo untouched. Use the `litellm==1.82.8` or `npm:package@version` target formats to scan the actual artifact before installing.
 
 - **Known CVEs** — dependency vulnerabilities checked against the [OSV database](https://osv.dev) (via [OSV Scanner](https://github.com/google/osv-scanner))
+- **Dependency supply chain** *(optional, requires [dep-scan](https://github.com/tkdtaylor/dep-scan) image)* — typosquatting detection, minimum package age enforcement (< 48h), maintainer change/takeover detection, dependency confusion warnings, malicious install script analysis
 - **Obfuscation** — base64/hex encoded payloads, eval/exec patterns
 - **Download & execute** — `curl | bash`, `wget | sh`, fetching and running remote scripts
 - **Supply chain hooks** — malicious `postinstall`, `setup.py`, `__init__.py` install triggers
@@ -173,6 +174,8 @@ Kiro's agent can execute terminal commands, so the full Docker-based scan runs a
 ```
 code-scanner/           ← skill folder (upload this)
 ├── SKILL.md            ← main skill file (required)
+├── docker/
+│   └── Dockerfile.dep-scan ← builds the dep-scan supply chain scanner image
 └── references/
     ├── patterns.md        ← malicious pattern reference library
     ├── scan-commands.md   ← Docker run commands for each scan step

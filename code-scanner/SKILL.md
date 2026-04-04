@@ -95,6 +95,17 @@ All analysis runs with `--network none`. See `references/patterns.md` for the fu
 
 **OSV Scanner** — run first (requires brief network access to query the OSV API; only dependency metadata is sent, no repo code). Use the command in `references/scan-commands.md` → "OSV Scanner".
 
+**dep-scan** — run alongside OSV (also requires network access to query registry APIs). Checks every declared dependency for supply chain attack indicators that go beyond known vulnerabilities:
+- **Typosquatting** — package names similar to popular packages (Levenshtein distance)
+- **Package age** — recently published packages (< 48 hours)
+- **Maintainer changes** — ownership transfers or takeovers since last scan
+- **Dependency confusion** — internal-looking names on public registries
+- **Malicious install scripts** — eval, exec, child_process, subprocess in hooks
+
+Requires the `dep-scan:latest` Docker image (build once — see `references/scan-commands.md` → "Dependency Supply Chain Analysis"). If the image is not available, skip this step and note "dep-scan not available — dependency supply chain analysis skipped" in the report.
+
+For each flagged dependency, record severity (dep-scan `block` → HIGH, `warn` → MEDIUM), the triggering policy, the package name and version, and a plain-English explanation.
+
 **Standard scan suite** — run the four batched containers from `references/scan-commands.md` → "Standard Scan Suite". They cover, in priority order:
 1. Install hooks — run automatically without user action
 2. Download-and-execute — fetching and running remote code
@@ -205,7 +216,7 @@ The report `.md` file is the only artifact that remains.
 ## Behavioral Rules
 
 - Never execute any downloaded code, even to test it
-- All analysis containers must use `--network none` except the download step and secondary payload fetch
+- All analysis containers must use `--network none` except the download step, OSV scanner, dep-scan, and secondary payload fetch
 - All containers must use `--security-opt no-new-privileges`
 - Do not use `--cap-drop ALL` — dropping `CAP_DAC_READ_SEARCH` prevents reading volume files with restrictive permission bits, causing grep to silently return no results. Isolation is maintained by `--network none`, `--security-opt no-new-privileges`, and non-executable files.
 - When exporting to the host for Step 8, always run `chmod -R a+rX` inside the container first — Docker files are root-owned and may be unreadable otherwise
