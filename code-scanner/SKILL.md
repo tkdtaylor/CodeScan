@@ -1,60 +1,73 @@
 ---
 name: code-scanner
 description: Scans GitHub repos, PyPI/npm packages, zip archives, and local skill files for malicious code, supply-chain attacks, backdoors, and credential harvesting — using a disposable Docker sandbox so nothing from the target ever executes on the host. Trigger this skill whenever a user asks to check, scan, or review any code for safety: "is this safe to install?", "scan this repo", "check this GitHub link", "is this npm package malicious?", "is this PyPI package safe to pip install?", "review this code for malware", "should I run this script?", or any time a user pastes a GitHub URL or package name they seem uncertain about. Even without explicit "scan" language, use this skill whenever someone shares an unfamiliar repo or package and safety is implicitly in question.
-compatibility: Requires Docker installed and running. Works on Linux, macOS, and Windows (Docker Desktop with WSL2). Claude Code recommended for full automation; see Platform Notes at the bottom for Claude.ai.
+compatibility: Requires Docker installed and running for remote targets (GitHub URLs, archives, PyPI/npm packages). Local paths scan natively without Docker. Works on Linux, macOS, and Windows (Docker Desktop with WSL2). Claude Code recommended for full automation; see Platform Notes at the bottom for Claude.ai.
 ---
 
 # Code Scanner
 
-Security analysis of a code repository in a fully disposable Docker sandbox. Nothing from the target touches the host filesystem, and the entire sandbox is destroyed when the scan completes.
+Security analysis of a code repository. Remote targets (URLs, packages) are downloaded into a fully disposable Docker sandbox — nothing from the target touches the host filesystem, and the entire sandbox is destroyed when the scan completes. Local paths already on disk are scanned in place with native tools; no sandbox is created because read-only text analysis of files that already exist on the host cannot execute anything.
 
-**Before running any Docker commands, read `references/scan-commands.md`** — it contains all the exact Docker run templates and grep patterns for every step below.
+**Before running any commands, read `references/scan-commands.md`** — it contains all the exact command templates and grep patterns for every step below, including a dedicated Local Mode section for local-path targets.
 
 ---
 
 ## Step 1: Identify the Target
 
 Extract the target from the user's message:
-- GitHub repository URL (e.g. `https://github.com/owner/repo`)
-- GitHub subdirectory URL (e.g. `https://github.com/owner/repo/tree/branch/subdir`)
-- Direct link to a `.zip` or `.tar.gz` archive
-- PyPI package with version (e.g. `litellm==1.82.8` or `pypi:litellm==1.82.8`)
-- npm package with version (e.g. `npm:express@4.18.2`)
-- Local path already downloaded
-- Local path to a skill folder or `SKILL.md` file
+- GitHub repository URL (e.g. `https://github.com/owner/repo`) — **remote**
+- GitHub subdirectory URL (e.g. `https://github.com/owner/repo/tree/branch/subdir`) — **remote**
+- Direct link to a `.zip` or `.tar.gz` archive — **remote**
+- PyPI package with version (e.g. `litellm==1.82.8` or `pypi:litellm==1.82.8`) — **remote**
+- npm package with version (e.g. `npm:express@4.18.2`) — **remote**
+- Local path to a directory already on disk — **local**
+- Local path to a skill folder or `SKILL.md` file — **local**
 
 > **Source repo ≠ published package.** Scanning a GitHub repository does not validate the corresponding PyPI or npm artifact. Supply chain attacks (like the March 2026 LiteLLM compromise) inject malicious code only into the published package while leaving the source repo clean. When evaluating whether a package is safe to `pip install` or `npm install`, always scan the artifact directly using the PyPI/npm targets above — not the GitHub source.
 
-If the target is a skill folder or `SKILL.md`, follow the **skill scanning** path (Step 4b). Skill scanning checks for prompt injection, dangerous embedded commands, and data exfiltration instructions in addition to the standard suite.
+**Set the mode**: if the target is a local path that already exists on disk, set `LOCAL_MODE=true` and `SCAN_ROOT="<absolute path to target>"`. In local mode the scan runs against the files in place — **no Docker sandbox is created, no volume, no download step**. The sandbox exists to prevent execution of code downloaded from untrusted sources; code already on the user's disk has already been present there, and read-only text analysis (grep, find) does not execute anything it reads. Skipping the sandbox makes local scans faster and avoids unnecessary Docker churn.
 
-If no target is provided, ask: "Please provide the GitHub repository URL, package name, or archive link you'd like me to scan."
+Otherwise set `LOCAL_MODE=false` — the remote target will be downloaded into a Docker sandbox volume (Step 2).
+
+If the target is a skill folder or `SKILL.md`, follow the **skill scanning** path (Step 4b). Skill scanning checks for prompt injection, dangerous embedded commands, and data exfiltration instructions in addition to the standard suite. Skill paths on disk always use local mode.
+
+If no target is provided, ask: "Please provide the GitHub repository URL, package name, archive link, or local path you'd like me to scan."
 
 Also check for a `--security-review` flag. If present, set `FORCE_SECURITY_REVIEW=true` — this overrides the default of skipping the Claude Code review when HIGH or CRITICAL findings are present.
 
-Confirm Docker is available:
+Confirm Docker is available **unless `LOCAL_MODE=true` and you will not run OSV Scanner or dep-scan** (both of those still use Docker as a tool runner, via a read-only bind mount of `SCAN_ROOT`):
 ```bash
 docker info > /dev/null 2>&1 && echo "Docker available" || echo "Docker not running — please start Docker Desktop or the Docker daemon"
 ```
+In pure-local mode with no OSV/dep-scan, Docker is not required at all.
 
 ---
 
 ## Step 1b: Pre-flight Size Check
 
-Before creating the sandbox, check download size. **Do not proceed if the target exceeds 2 GB. Warn and ask the user to confirm if it exceeds 500 MB.** Use the commands in `references/scan-commands.md` → "Size Check" section.
+**Skip this step entirely if `LOCAL_MODE=true`** — the user already has the files, so there is nothing to download. Run `du -sh "$SCAN_ROOT"` only if you want to report the size in the final report.
+
+For remote targets, check download size before creating the sandbox. **Do not proceed if the target exceeds 2 GB. Warn and ask the user to confirm if it exceeds 500 MB.** Use the commands in `references/scan-commands.md` → "Size Check" section.
 
 Interpret results:
 - **< 500 MB** — proceed
 - **500 MB – 2 GB** — warn and wait for confirmation
-- **> 2 GB** — stop: ask the user to clone locally and provide the local path
+- **> 2 GB** — stop: ask the user to clone locally and provide the local path (which will use local mode and bypass this limit)
 - **Size unavailable** (rate-limited or no `Content-Length`) — warn and ask to confirm
-
-For local skill files, skip this check — they are always small.
 
 ---
 
-## Step 2: Set Up the Docker Sandbox
+## Step 2: Set Up the Sandbox (remote targets only)
 
-Create a named Docker volume (repo content stays inside, never touches the host) and a host-side output directory for the report only.
+**Skip this step entirely if `LOCAL_MODE=true`.** Just ensure the output directory exists:
+
+```bash
+OUTPUT_DIR="$(pwd)/codescan-reports"
+mkdir -p "$OUTPUT_DIR"
+# SCAN_ROOT was set in Step 1 to the absolute local path
+```
+
+For remote targets, create a named Docker volume (repo content stays inside, never touches the host) and a host-side output directory for the report only.
 
 ```bash
 SCAN_ID="codescan-$(date +%s)"
@@ -68,7 +81,6 @@ Then download the target using the appropriate command from `references/scan-com
 - Archive URL → curl + extract
 - PyPI package → `pip download --no-deps`
 - npm package → `npm pack`
-- Local skill files → volume copy
 
 All downloads strip execute bits from files inside the volume after copying.
 
@@ -76,7 +88,7 @@ All downloads strip execute bits from files inside the volume after copying.
 
 ## Step 3: Map the Repository
 
-Run the structure overview command from `references/scan-commands.md` → "Structure Map" with `--network none`. Before continuing, identify:
+Run the structure overview command from `references/scan-commands.md`. In sandbox mode, use the "Structure Map" section (Docker, `--network none`). In local mode (`LOCAL_MODE=true`), use the equivalent from the "Local Mode Commands" section — native `find` against `$SCAN_ROOT`, no container. Before continuing, identify:
 
 1. **Language(s)** — from extensions and manifests (`package.json`, `go.mod`, `Cargo.toml`, `requirements.txt`, `Gemfile`, `pyproject.toml`)
 2. **Entry points** — `main.*`, `index.*`, `__main__.py`, `Makefile`, CI/CD configs
@@ -91,9 +103,9 @@ Report this map to the user before proceeding.
 
 ## Step 4: Static Analysis — Scan for Malicious Patterns
 
-All analysis runs with `--network none`. See `references/patterns.md` for the full pattern library and severity guidance.
+In sandbox mode, all analysis runs in Docker containers with `--network none` against the volume. In local mode, the same grep/find patterns run natively on the host against `$SCAN_ROOT`; no container is involved for the text-search steps. The "Local Mode Commands" section of `references/scan-commands.md` provides the native equivalents. See `references/patterns.md` for the full pattern library and severity guidance.
 
-**OSV Scanner** — run first (requires brief network access to query the OSV API; only dependency metadata is sent, no repo code). Use the command in `references/scan-commands.md` → "OSV Scanner".
+**OSV Scanner** — run first (requires brief network access to query the OSV API; only dependency metadata is sent, no repo code). Use the command in `references/scan-commands.md` → "OSV Scanner". In local mode, the same OSV container is used but it bind-mounts `$SCAN_ROOT` read-only instead of mounting the sandbox volume — see "Local Mode Commands" → "OSV Scanner (local)".
 
 **dep-scan** — run alongside OSV (also requires network access to query registry APIs). Checks every declared dependency for supply chain attack indicators that go beyond known vulnerabilities:
 - **Typosquatting** — package names similar to popular packages (Levenshtein distance)
@@ -102,11 +114,11 @@ All analysis runs with `--network none`. See `references/patterns.md` for the fu
 - **Dependency confusion** — internal-looking names on public registries
 - **Malicious install scripts** — eval, exec, child_process, subprocess in hooks
 
-Requires the `dep-scan:latest` Docker image (build once — see `references/scan-commands.md` → "Dependency Supply Chain Analysis"). If the image is not available, skip this step and note "dep-scan not available — dependency supply chain analysis skipped" in the report.
+Requires the `dep-scan:latest` Docker image (build once — see `references/scan-commands.md` → "Dependency Supply Chain Analysis"). In local mode, the dep-scan container bind-mounts `$SCAN_ROOT` read-only — see "Local Mode Commands" → "dep-scan (local)". If the image is not available, skip this step and note "dep-scan not available — dependency supply chain analysis skipped" in the report.
 
 For each flagged dependency, record severity (dep-scan `block` → HIGH, `warn` → MEDIUM), the triggering policy, the package name and version, and a plain-English explanation.
 
-**Standard scan suite** — run the four batched containers from `references/scan-commands.md` → "Standard Scan Suite". They cover, in priority order:
+**Standard scan suite** — in sandbox mode, run the four batched containers from `references/scan-commands.md` → "Standard Scan Suite". In local mode, run the native equivalents from "Local Mode Commands" → "Standard Scan Suite (local)" — same patterns, run directly against `$SCAN_ROOT` with host `grep`/`find`. They cover, in priority order:
 1. Install hooks — run automatically without user action
 2. Download-and-execute — fetching and running remote code
 3. Obfuscation — encoded payloads, eval/exec of encoded strings
@@ -129,7 +141,7 @@ For every finding, record:
 
 Run when the target is a skill file or folder — in addition to the standard suite above.
 
-Skill files are markdown documents that instruct Claude how to behave. The threat here is manipulation of Claude itself rather than execution of malicious binaries. Run the five checks from `references/scan-commands.md` → "Skill-Specific Checks":
+Skill files are markdown documents that instruct Claude how to behave. The threat here is manipulation of Claude itself rather than execution of malicious binaries. Run the five checks from `references/scan-commands.md` → "Skill-Specific Checks" (sandbox mode) or "Local Mode Commands" → "Skill-Specific Checks (local)" (local mode, which is the common case for skills):
 
 1. Prompt injection keywords
 2. Data exfiltration instructions
@@ -190,7 +202,9 @@ The gate exists because exporting code to the host when the repo is already conf
 
 ### Export, review, and clean up
 
-Use the export command from `references/scan-commands.md` → "Step 8 Export" to copy files to a temp directory. The `chmod -R a+rX` inside the container is essential — Docker-created files are root-owned and unreadable by the host user without this step.
+**In local mode (`LOCAL_MODE=true`) skip the export and cleanup entirely** — the files are already on the host. Read them directly from `$SCAN_ROOT` using your file tools.
+
+In sandbox mode, use the export command from `references/scan-commands.md` → "Step 8 Export" to copy files to a temp directory. The `chmod -R a+rX` inside the container is essential — Docker-created files are root-owned and unreadable by the host user without this step.
 
 Read key source files with your file tools and check for:
 - **SQL injection** — string concatenation into queries, unparameterised inputs
@@ -198,11 +212,19 @@ Read key source files with your file tools and check for:
 - **Auth flaws** — missing auth checks, hardcoded credentials, insecure session handling
 - **Insecure data handling** — unvalidated input, unsafe deserialisation, cleartext secrets
 
-Append findings to the report, then clean up using the cleanup command from `references/scan-commands.md` → "Step 8 Cleanup". The cleanup uses `find /cleanup -mindepth 1 -delete` inside the container — plain `rm -rf /cleanup/*` skips hidden directories like `.git` which are root-owned and cause permission errors on the host.
+Append findings to the report. In sandbox mode, clean up using the cleanup command from `references/scan-commands.md` → "Step 8 Cleanup". The cleanup uses `find /cleanup -mindepth 1 -delete` inside the container — plain `rm -rf /cleanup/*` skips hidden directories like `.git` which are root-owned and cause permission errors on the host. In local mode there is no temp directory to clean up.
 
 ---
 
 ## Step 9: Destroy the Sandbox
+
+**In local mode, skip this step — there is no sandbox to destroy.** Just print the report path:
+
+```bash
+echo "Scan complete (local mode, no sandbox). Report: $REPORT_FILE"
+```
+
+In sandbox mode, remove the volume:
 
 ```bash
 docker volume rm "$SCAN_ID"
@@ -215,16 +237,17 @@ The report `.md` file is the only artifact that remains.
 
 ## Behavioral Rules
 
-- Never execute any downloaded code, even to test it
-- All analysis containers must use `--network none` except the download step, OSV scanner, dep-scan, and secondary payload fetch
-- All containers must use `--security-opt no-new-privileges`
-- Do not use `--cap-drop ALL` — dropping `CAP_DAC_READ_SEARCH` prevents reading volume files with restrictive permission bits, causing grep to silently return no results. Isolation is maintained by `--network none`, `--security-opt no-new-privileges`, and non-executable files.
-- When exporting to the host for Step 8, always run `chmod -R a+rX` inside the container first — Docker files are root-owned and may be unreadable otherwise
-- When cleaning up the temp directory, use a Docker container to delete root-owned files — plain `rm -rf` from the host will fail with permission denied on `.git` and similar directories
+- Never execute any downloaded or local code, even to test it. In local mode, only ever run read-only tools (`grep`, `find`, `file`, `strings`, `cat`/Read) against `$SCAN_ROOT` — never `bash`, `python`, `node`, `make`, or anything that invokes an interpreter on target files.
+- In sandbox mode, all analysis containers must use `--network none` except the download step, OSV scanner, dep-scan, and secondary payload fetch
+- In sandbox mode, all containers must use `--security-opt no-new-privileges`
+- In sandbox mode, do not use `--cap-drop ALL` — dropping `CAP_DAC_READ_SEARCH` prevents reading volume files with restrictive permission bits, causing grep to silently return no results. Isolation is maintained by `--network none`, `--security-opt no-new-privileges`, and non-executable files.
+- In local mode, do not modify files under `$SCAN_ROOT` — no `chmod`, no writes, no deletions. The user's working copy must be left untouched.
+- When exporting to the host for Step 8 (sandbox mode only), always run `chmod -R a+rX` inside the container first — Docker files are root-owned and may be unreadable otherwise
+- When cleaning up the temp directory (sandbox mode only), use a Docker container to delete root-owned files — plain `rm -rf` from the host will fail with permission denied on `.git` and similar directories
 - If a file cannot be read (encrypted, corrupted), flag it UNVERIFIED
 - Do not dismiss a finding as "probably fine" without a specific technical reason
 - When in doubt, escalate severity rather than downgrade
-- Always destroy the volume in Step 9
+- In sandbox mode, always destroy the volume in Step 9. In local mode, there is nothing to destroy.
 
 ---
 
