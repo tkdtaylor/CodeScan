@@ -3,7 +3,9 @@
 A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans a code repository for malicious patterns, suspicious links, and supply-chain attack indicators. Works across Claude Code, GitHub Copilot, Cursor, Windsurf, Kiro, and Google Antigravity.
 
 > [!IMPORTANT]
-> **Docker is required.** This skill will not work without Docker installed and running on your machine. All analysis runs inside a disposable Docker container — nothing from the target repo ever touches the host filesystem, and the entire sandbox is destroyed when the scan completes.
+> **Docker is required for remote targets** (GitHub URLs, archives, PyPI/npm packages). When the target is a remote source, it is downloaded into a disposable Docker volume — nothing from the target repo ever touches the host filesystem, and the entire sandbox is destroyed when the scan completes.
+>
+> **Local paths scan natively without Docker.** If you point the scanner at a folder already on your disk (a cloned repo, a skill folder, a downloaded project), it skips the sandbox entirely and runs read-only text analysis (`grep`, `find`) in place. The sandbox exists to prevent execution of *downloaded* code; files already on your machine have already been there, and reading them with text tools does not execute them. OSV Scanner and dep-scan still use Docker as a tool runner in local mode (via a read-only bind mount), but you can skip both if you don't need dependency checks.
 >
 > | Platform | Install |
 > |---|---|
@@ -18,16 +20,15 @@ A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans
 
 ## What it does
 
-Given a GitHub repository URL, a zip archive, a PyPI or npm package name, or a local skill folder, this skill instructs Claude to:
+Given a GitHub repository URL, a zip archive, a PyPI or npm package name, or a local path already on disk, this skill instructs Claude to:
 
-1. Create an isolated Docker volume and download the code into it
-2. Strip all execute permissions before any analysis begins
-3. Check dependency manifests against the OSV vulnerability database and *(optionally)* run dep-scan supply chain analysis — typosquatting, package age, maintainer changes, dependency confusion
-4. Statically analyze the code for malicious patterns using `--network none` containers
-5. Follow any embedded download URLs and inspect those payloads inside the sandbox too
-6. Write a structured Markdown report to `./codescan-reports/` on your machine
-7. *(Claude Code only)* If no HIGH or CRITICAL findings were found, run a supplementary review using Claude Code's built-in security analysis and append the results to the report
-8. Destroy the Docker volume — removing all repo content from your system
+1. **Remote targets**: create an isolated Docker volume and download the code into it, stripping all execute permissions. **Local paths**: skip the sandbox entirely and scan the files in place with native `grep`/`find` — no volume, no download, no copy.
+2. Check dependency manifests against the OSV vulnerability database and *(optionally)* run dep-scan supply chain analysis — typosquatting, package age, maintainer changes, dependency confusion
+3. Statically analyze the code for malicious patterns (using `--network none` containers in sandbox mode, or native host tools in local mode)
+4. Follow any embedded download URLs and inspect those payloads inside an ephemeral Docker volume
+5. Write a structured Markdown report to `./codescan-reports/` on your machine
+6. *(Claude Code only)* If no HIGH or CRITICAL findings were found, run a supplementary review using Claude Code's built-in security analysis and append the results to the report
+7. **Remote targets**: destroy the Docker volume. **Local paths**: nothing to destroy — your files are left untouched.
 
 ## Trigger phrases
 
@@ -191,6 +192,8 @@ code-scanner/           ← skill folder (upload this)
 
 ## How the Docker sandbox works
 
+### Remote targets (sandbox mode)
+
 ```
 Host machine
 ├── ./codescan-reports/        ← report .md files written here (host)
@@ -213,6 +216,21 @@ The temp directory is only created when the Claude Code security review runs (no
 Each analysis step runs in a container with:
 - `--network none` — no outbound connections during analysis
 - `--security-opt no-new-privileges` — no privilege escalation
+
+### Local paths (no sandbox)
+
+```
+Host machine
+├── ./codescan-reports/        ← report .md files written here
+│   └── scan-report-*.md
+│
+└── <your local path>          ← SCAN_ROOT — scanned in place, read-only
+    └── ...                    ← files left untouched, no copies made
+```
+
+No Docker volume, no download, no temp directory, no export, no cleanup. Only `grep`/`find` read the files. OSV Scanner and dep-scan (if run) still use Docker as a tool runner, but bind-mount `SCAN_ROOT` read-only — they never write to it.
+
+**Why is this safe?** The sandbox exists to prevent *execution* of code fetched from an untrusted source (install hooks, setup scripts, postinstall triggers). Read-only text analysis tools never execute the code they read. If the code is already on your disk, any risk from its presence has already materialised; scanning it with `grep` adds none.
 
 ## Contributing
 
