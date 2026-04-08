@@ -190,17 +190,32 @@ Checks every declared dependency for typosquatting, suspicious package age, main
 
 Requires the `dep-scan:latest` Docker image — see build instructions below. If the image is not available, skip this step and note it in the report.
 
-### One-time setup: build the dep-scan image
+### Build the dep-scan image (auto-rebuild on Dockerfile changes)
+
+The dep-scan image is built once and reused across scans. A SHA256 hash of the Dockerfile is stored as a Docker label — the image rebuilds automatically when the Dockerfile content changes (new dep-scan version, base image update, etc.). Existing scan volumes are unaffected.
 
 ```bash
-docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .
+DEP_SCAN_DOCKERFILE="$CLAUDE_SKILL_DIR/docker/Dockerfile.dep-scan"
+CURRENT_HASH=$(sha256sum "$DEP_SCAN_DOCKERFILE" | cut -d' ' -f1)
+STORED_HASH=$(docker image inspect dep-scan:latest \
+    --format '{{index .Config.Labels "dev.codescan.dockerfile-hash"}}' 2>/dev/null || echo "missing")
+
+if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
+    echo "Building dep-scan image..."
+    docker build \
+        --label "dev.codescan.dockerfile-hash=$CURRENT_HASH" \
+        -t dep-scan:latest \
+        -f "$DEP_SCAN_DOCKERFILE" \
+        "$(dirname "$DEP_SCAN_DOCKERFILE")"
+    echo "dep-scan image ready."
+else
+    echo "dep-scan image is up-to-date — skipping build."
+fi
 ```
 
-The Dockerfile downloads a prebuilt [dep-scan](https://github.com/tkdtaylor/dep-scan) binary from GitHub Releases. No Rust toolchain required — builds in seconds.
-
-Verify the image exists before running:
+If `$CLAUDE_SKILL_DIR` is not set (e.g. manual install or non-Claude tool), build directly:
 ```bash
-docker image inspect dep-scan:latest > /dev/null 2>&1 && echo "dep-scan image ready" || echo "dep-scan image not found — build it first or skip this step"
+docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .
 ```
 
 ### Run dependency supply chain analysis

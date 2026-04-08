@@ -1,7 +1,7 @@
 ---
 name: code-scanner
 description: Scans GitHub repos, PyPI/npm packages, zip archives, and local skill files for malicious code, supply-chain attacks, backdoors, and credential harvesting — using a disposable Docker sandbox so nothing from the target ever executes on the host. Trigger this skill whenever a user asks to check, scan, or review any code for safety: "is this safe to install?", "scan this repo", "check this GitHub link", "is this npm package malicious?", "is this PyPI package safe to pip install?", "review this code for malware", "should I run this script?", or any time a user pastes a GitHub URL or package name they seem uncertain about. Even without explicit "scan" language, use this skill whenever someone shares an unfamiliar repo or package and safety is implicitly in question.
-compatibility: Requires Docker installed and running for remote targets (GitHub URLs, archives, PyPI/npm packages). Local paths scan natively without Docker. Works on Linux, macOS, and Windows (Docker Desktop with WSL2). Claude Code recommended for full automation; see Platform Notes at the bottom for Claude.ai.
+compatibility: Requires Docker installed and running for remote targets (GitHub URLs, archives, PyPI/npm packages). Local paths scan natively without Docker. Works on Linux, macOS, and Windows (Docker Desktop with WSL2). Fully compatible with Docker Sandbox (sbx) environments — scanning containers run normally inside the microVM; ensure your network policy allows image pulls and API access (see Step 1). Claude Code recommended for full automation; see Platform Notes at the bottom for Claude.ai.
 ---
 
 # Code Scanner
@@ -35,11 +35,28 @@ If no target is provided, ask: "Please provide the GitHub repository URL, packag
 
 Also check for a `--security-review` flag. If present, set `FORCE_SECURITY_REVIEW=true` — this overrides the default of skipping the Claude Code review when HIGH or CRITICAL findings are present.
 
-Confirm Docker is available **unless `LOCAL_MODE=true` and you will not run OSV Scanner or dep-scan** (both of those still use Docker as a tool runner, via a read-only bind mount of `SCAN_ROOT`):
+Confirm Docker is available **unless `LOCAL_MODE=true` and you will not run OSV Scanner or dep-scan** (both of those still use Docker as a tool runner, via a read-only bind mount of `SCAN_ROOT`).
+
+Detect the isolation backend — prefer Docker Sandbox (`sbx`) when present:
+
 ```bash
-docker info > /dev/null 2>&1 && echo "Docker available" || echo "Docker not running — please start Docker Desktop or the Docker daemon"
+if command -v sbx >/dev/null 2>&1; then
+    echo "ISOLATION=sbx"
+elif command -v docker >/dev/null 2>&1; then
+    echo "ISOLATION=docker"
+else
+    echo "ISOLATION=none"
+fi
+
+# Verify Docker is functional (needed for remote targets and OSV/dep-scan)
+docker info > /dev/null 2>&1 && echo "Docker available" || echo "Docker not running"
 ```
-In pure-local mode with no OSV/dep-scan, Docker is not required at all.
+
+- **`ISOLATION=sbx`**: Docker Sandbox detected — scanning containers run normally inside the microVM. If scans fail to pull images or query APIs (OSV, dep-scan, PyPI, npm), your sbx network policy may be blocking them. Use the "Balanced" policy or add these domains to your allow list: `ghcr.io`, `registry-1.docker.io`, `production.cloudflare.docker.com`, `api.github.com`, `pypi.org`, `registry.npmjs.org`, `api.osv.dev`.
+- **`ISOLATION=docker`**: Docker Engine available directly — the default path. All scan commands work as documented.
+- **`ISOLATION=none`**: No container runtime found. Only pure local mode scans will work (no OSV, no dep-scan, no sandbox for remote targets). Tell the user: "Docker is not available — only local path targets can be scanned, and dependency checks (OSV Scanner, dep-scan) will be skipped."
+
+In pure-local mode with no OSV/dep-scan, Docker is not required at all regardless of isolation backend.
 
 ---
 

@@ -12,6 +12,7 @@ A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans
 > | Linux | [Docker Engine](https://docs.docker.com/engine/install/) |
 > | macOS | [Docker Desktop](https://docs.docker.com/desktop/install/mac-install/) |
 > | Windows | [Docker Desktop](https://docs.docker.com/desktop/install/windows-install/) with WSL2 |
+> | Docker Sandbox (`sbx`) | Scanning containers run normally inside the microVM. Use the "Balanced" network policy or add `ghcr.io`, `registry-1.docker.io`, `pypi.org`, `registry.npmjs.org` to your allow list. |
 >
 > Verify Docker is running before use: `docker info`
 
@@ -191,6 +192,18 @@ code-scanner/           ← skill folder (upload this)
 ```
 
 ## How the Docker sandbox works
+
+### Docker Sandbox (`sbx`) environments
+
+When running Claude Code inside a Docker Sandbox (`sbx`), all scanning containers work normally — `sbx` provides Docker access within the microVM. The scanner auto-detects `sbx` and proceeds with the standard Docker workflow.
+
+The only consideration is network policies. Scans need network access for:
+- **Image pulls**: `registry-1.docker.io`, `production.cloudflare.docker.com`, `ghcr.io` (OSV Scanner)
+- **API queries**: `api.osv.dev` (OSV), `api.github.com`, `pypi.org`, `registry.npmjs.org` (dep-scan)
+
+The "Balanced" sbx network policy allows all of these by default. If you use a restrictive policy, add these domains to your allow list.
+
+The dep-scan image auto-rebuilds when its Dockerfile changes — a SHA256 hash is stored as a Docker label and checked before each scan. No manual rebuild needed after skill updates.
 
 ### Remote targets (sandbox mode)
 
