@@ -188,7 +188,7 @@ For every OSV finding, record the CVE/GHSA ID, affected package and version, and
 
 Checks every declared dependency for typosquatting, suspicious package age, maintainer changes, known vulnerabilities, dependency confusion, and malicious install scripts. Goes beyond OSV by querying registry metadata directly.
 
-Requires the `dep-scan:latest` Docker image — see build instructions below. If the image is not available, skip this step and note it in the report.
+Requires the `dep-scan:latest` Docker image — the build/check block below runs on every scan and rebuilds automatically when the Dockerfile changes (no-op when up-to-date). dep-scan is a mandatory step. Only skip it if the image build itself fails — in that case, record the build error in the report.
 
 ### Build the dep-scan image (auto-rebuild on Dockerfile changes)
 

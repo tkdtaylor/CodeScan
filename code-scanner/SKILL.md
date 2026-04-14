@@ -131,7 +131,7 @@ In sandbox mode, all analysis runs in Docker containers with `--network none` ag
 - **Dependency confusion** — internal-looking names on public registries
 - **Malicious install scripts** — eval, exec, child_process, subprocess in hooks
 
-Requires the `dep-scan:latest` Docker image (build once — see `references/scan-commands.md` → "Dependency Supply Chain Analysis"). In local mode, the dep-scan container bind-mounts `$SCAN_ROOT` read-only — see "Local Mode Commands" → "dep-scan (local)". If the image is not available, skip this step and note "dep-scan not available — dependency supply chain analysis skipped" in the report.
+Uses the `dep-scan:latest` Docker image, which is **built automatically on first scan and after Dockerfile changes** — run the build/check block in `references/scan-commands.md` → "Build the dep-scan image" before invoking dep-scan. This step is mandatory; do not skip it. In local mode, the dep-scan container bind-mounts `$SCAN_ROOT` read-only — see "Local Mode Commands" → "dep-scan (local)". If the image build itself fails (network failure, Docker error), record the build error in the report and continue with the remaining scan steps.
 
 For each flagged dependency, record severity (dep-scan `block` → HIGH, `warn` → MEDIUM), the triggering policy, the package name and version, and a plain-English explanation.
 

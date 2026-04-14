@@ -39,7 +39,7 @@ This is a classic supply-chain attack pattern. Do not install.">
 | **Install hooks** | YES — postinstall in package.json / NONE |
 | **Binary files** | N (unreadable without decompilation) |
 | **Packed/obfuscated** | YES — UPX, base64, … / NO |
-| **dep-scan** | ✅ N packages checked (N npm, N PyPI) — N warnings, N blocks / ⏭️ skipped (image not available) |
+| **dep-scan** | ✅ N packages checked (N npm, N PyPI) — N warnings, N blocks / ⚠️ image build failed — see error below |
 
 ---
 
@@ -97,9 +97,8 @@ exact code snippet
 
 ## Dependency Supply Chain Analysis
 
-> Include this section when dep-scan results are available. If dep-scan was skipped, write:
-> "dep-scan image not available — dependency supply chain analysis skipped. Build with:
-> `docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan /path/to/dep-scan`"
+> dep-scan runs on every scan. Include this section with the results table below. If the image build itself failed (network failure, Docker error), replace the table with:
+> "⚠️ **dep-scan image build failed** — dependency supply chain analysis could not run. Error: \<paste docker build error\>. Retry manually: `docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan /path/to/dep-scan`"
 
 | Package | Version | Registry | Age | Flagged Policies |
 |---------|---------|----------|-----|------------------|

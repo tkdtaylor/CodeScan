@@ -24,7 +24,7 @@ A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans
 Given a GitHub repository URL, a zip archive, a PyPI or npm package name, or a local path already on disk, this skill instructs Claude to:
 
 1. **Remote targets**: create an isolated Docker volume and download the code into it, stripping all execute permissions. **Local paths**: skip the sandbox entirely and scan the files in place with native `grep`/`find` — no volume, no download, no copy.
-2. Check dependency manifests against the OSV vulnerability database and *(optionally)* run dep-scan supply chain analysis — typosquatting, package age, maintainer changes, dependency confusion
+2. Check dependency manifests against the OSV vulnerability database and run dep-scan supply chain analysis — typosquatting, package age, maintainer changes, dependency confusion
 3. Statically analyze the code for malicious patterns (using `--network none` containers in sandbox mode, or native host tools in local mode)
 4. Follow any embedded download URLs and inspect those payloads inside an ephemeral Docker volume
 5. Write a structured Markdown report to `./codescan-reports/` on your machine
@@ -51,7 +51,7 @@ Add `--security-review` to any phrase to force the Claude Code security review s
 > **Scanning the GitHub source repo is not the same as scanning the published package.** Supply chain attacks like the March 2026 LiteLLM compromise inject malicious code only into the PyPI/npm artifact while leaving the source repo untouched. Use the `litellm==1.82.8` or `npm:package@version` target formats to scan the actual artifact before installing.
 
 - **Known CVEs** — dependency vulnerabilities checked against the [OSV database](https://osv.dev) (via [OSV Scanner](https://github.com/google/osv-scanner))
-- **Dependency supply chain** *(optional)* — typosquatting detection, minimum package age enforcement (< 48h), maintainer change/takeover detection, dependency confusion warnings, malicious install script analysis. Powered by [dep-scan](https://github.com/tkdtaylor/dep-scan) — build the image once: `docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .`
+- **Dependency supply chain** — typosquatting detection, minimum package age enforcement (< 48h), maintainer change/takeover detection, dependency confusion warnings, malicious install script analysis. Powered by [dep-scan](https://github.com/tkdtaylor/dep-scan); the image is built automatically on first scan (~30s, downloads a prebuilt release binary — no Rust toolchain needed) and reused thereafter.
 - **Obfuscation** — base64/hex encoded payloads, eval/exec patterns
 - **Download & execute** — `curl | bash`, `wget | sh`, fetching and running remote scripts
 - **Supply chain hooks** — malicious `postinstall`, `setup.py`, `__init__.py` install triggers
@@ -111,8 +111,11 @@ Try asking the tool itself, Claude for example, to install the skill and give it
 # Clone and copy the skill into your Claude skills directory
 git clone https://github.com/tkdtaylor/CodeScan /tmp/CodeScan
 cp -r /tmp/CodeScan/code-scanner ~/.claude/skills/
+```
 
-# Optional: build the dep-scan image for dependency supply chain analysis
+The dep-scan image builds itself on your first scan. To pre-build it now (optional, saves ~30s on first run):
+
+```bash
 docker build -t dep-scan:latest -f /tmp/CodeScan/code-scanner/docker/Dockerfile.dep-scan /tmp/CodeScan
 ```
 
@@ -120,8 +123,11 @@ docker build -t dep-scan:latest -f /tmp/CodeScan/code-scanner/docker/Dockerfile.
 ```powershell
 git clone https://github.com/tkdtaylor/CodeScan
 Copy-Item -Recurse CodeScan\code-scanner "$env:USERPROFILE\.claude\skills\"
+```
 
-# Optional: build the dep-scan image for dependency supply chain analysis
+The dep-scan image builds itself on your first scan. To pre-build it now (optional, saves ~30s on first run):
+
+```powershell
 docker build -t dep-scan:latest -f CodeScan\code-scanner\docker\Dockerfile.dep-scan CodeScan
 ```
 
@@ -192,6 +198,16 @@ code-scanner/           ← skill folder (upload this)
 ```
 
 ## How the Docker sandbox works
+
+### Isolation backend detection
+
+At the start of every scan, the skill probes for an isolation backend in this order:
+
+1. **`sbx`** — Anthropic's [Docker Sandbox](https://docs.claude.com/en/docs/claude-code/sandboxing) (currently macOS and Windows only). Scanning containers run inside the microVM.
+2. **`docker`** — standard Docker Engine or Docker Desktop on the host. This is the path Linux users hit, and the macOS/Windows path when `sbx` isn't installed.
+3. **`none`** — no container runtime found. Only **local path** targets can be scanned, and OSV Scanner / dep-scan are skipped automatically. Remote targets (GitHub URLs, archives, PyPI/npm) will refuse to run because there's nowhere safe to download them.
+
+The first match wins — there's no manual switch. If you have both `sbx` and `docker`, `sbx` is preferred.
 
 ### Docker Sandbox (`sbx`) environments
 
