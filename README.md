@@ -203,7 +203,7 @@ code-scanner/           ← skill folder (upload this)
 
 At the start of every scan, the skill probes for an isolation backend in this order:
 
-1. **`sbx`** — Anthropic's [Docker Sandbox](https://docs.claude.com/en/docs/claude-code/sandboxing) (currently macOS and Windows only). Scanning containers run inside the microVM.
+1. **`sbx`** — Docker Sandbox (currently macOS and Windows only). Scanning containers run inside the microVM.
 2. **`docker`** — standard Docker Engine or Docker Desktop on the host. This is the path Linux users hit, and the macOS/Windows path when `sbx` isn't installed.
 3. **`none`** — no container runtime found. Only **local path** targets can be scanned, and OSV Scanner / dep-scan are skipped automatically. Remote targets (GitHub URLs, archives, PyPI/npm) will refuse to run because there's nowhere safe to download them.
 
