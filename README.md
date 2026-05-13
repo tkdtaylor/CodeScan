@@ -2,6 +2,8 @@
 
 A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans a code repository for malicious patterns, suspicious links, and supply-chain attack indicators. Works across Claude Code, GitHub Copilot, Cursor, Windsurf, Kiro, and Google Antigravity.
 
+![code-scanner architecture: untrusted code contained inside a secure disposable Docker boundary while scanners produce a Markdown report](assets/code-scanner-architecture.png)
+
 > [!IMPORTANT]
 > **Docker is required for remote targets** (GitHub URLs, archives, PyPI/npm packages). When the target is a remote source, it is downloaded into a disposable Docker volume — nothing from the target repo ever touches the host filesystem, and the entire sandbox is destroyed when the scan completes.
 >
