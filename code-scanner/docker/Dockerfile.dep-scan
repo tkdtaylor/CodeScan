@@ -5,12 +5,12 @@
 #   docker build -t dep-scan:latest -f code-scanner/docker/Dockerfile.dep-scan .
 #
 # The code-scanner skill auto-rebuilds this image when the Dockerfile changes
-# using a SHA256 hash stored in the dev.codescan.dockerfile-hash label.
+# using a SHA256 hash stored in the dev.code-scanner.dockerfile-hash label.
 
 FROM ubuntu:24.04
 
-LABEL dev.codescan.image-type="dep-scan"
-LABEL dev.codescan.description="Supply chain dependency scanner for CodeScan"
+LABEL dev.code-scanner.image-type="dep-scan"
+LABEL dev.code-scanner.description="Supply chain dependency scanner for Code Scanner"
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl jq && \
     rm -rf /var/lib/apt/lists/*

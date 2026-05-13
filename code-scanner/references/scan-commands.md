@@ -198,12 +198,12 @@ The dep-scan image is built once and reused across scans. A SHA256 hash of the D
 DEP_SCAN_DOCKERFILE="$CLAUDE_SKILL_DIR/docker/Dockerfile.dep-scan"
 CURRENT_HASH=$(sha256sum "$DEP_SCAN_DOCKERFILE" | cut -d' ' -f1)
 STORED_HASH=$(docker image inspect dep-scan:latest \
-    --format '{{index .Config.Labels "dev.codescan.dockerfile-hash"}}' 2>/dev/null || echo "missing")
+    --format '{{index .Config.Labels "dev.code-scanner.dockerfile-hash"}}' 2>/dev/null || echo "missing")
 
 if [ "$CURRENT_HASH" != "$STORED_HASH" ]; then
     echo "Building dep-scan image..."
     docker build \
-        --label "dev.codescan.dockerfile-hash=$CURRENT_HASH" \
+        --label "dev.code-scanner.dockerfile-hash=$CURRENT_HASH" \
         -t dep-scan:latest \
         -f "$DEP_SCAN_DOCKERFILE" \
         "$(dirname "$DEP_SCAN_DOCKERFILE")"
@@ -274,7 +274,7 @@ docker run --rm \
 
 dep-scan returns JSON when `--json` is used. Each package entry includes a `result` field and per-policy breakdown:
 
-| dep-scan result | CodeScan severity | Action |
+| dep-scan result | Code Scanner severity | Action |
 |-----------------|-------------------|--------|
 | `block` | HIGH | Record as finding — the dependency failed a blocking policy |
 | `warn` | MEDIUM | Record as finding — the dependency triggered a warning |
@@ -482,7 +482,7 @@ docker run --rm \
 ### Export to temp directory
 
 ```bash
-TEMP_DIR=$(mktemp -d /tmp/codescan-review-XXXXXX)
+TEMP_DIR=$(mktemp -d /tmp/code-scanner-review-XXXXXX)
 docker run --rm \
   --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan:ro" \

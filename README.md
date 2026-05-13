@@ -1,4 +1,4 @@
-# CodeScan — A Claude Skill for Malicious Code Detection
+# Code Scanner — A Claude Skill for Malicious Code Detection
 
 A portable [Agent Skill](https://www.anthropic.com/news/agent-skills) that scans a code repository for malicious patterns, suspicious links, and supply-chain attack indicators. Works across Claude Code, GitHub Copilot, Cursor, Windsurf, Kiro, and Google Antigravity.
 
@@ -27,7 +27,7 @@ Given a GitHub repository URL, a zip archive, a PyPI or npm package name, or a l
 2. Check dependency manifests against the OSV vulnerability database and run dep-scan supply chain analysis — typosquatting, package age, maintainer changes, dependency confusion
 3. Statically analyze the code for malicious patterns (using `--network none` containers in sandbox mode, or native host tools in local mode)
 4. Follow any embedded download URLs and inspect those payloads inside an ephemeral Docker volume
-5. Write a structured Markdown report to `./codescan-reports/` on your machine
+5. Write a structured Markdown report to `./code-scanner-reports/` on your machine
 6. *(Claude Code only)* If no HIGH or CRITICAL findings were found, run a supplementary review using Claude Code's built-in security analysis and append the results to the report
 7. **Remote targets**: destroy the Docker volume. **Local paths**: nothing to destroy — your files are left untouched.
 
@@ -75,7 +75,7 @@ Add `--security-review` to any phrase to force the Claude Code security review s
 
 ## Output
 
-You can see sample reports here: [SAFE — BHIL toolkit](./sample-reports/scan-report-20260322.md) · [CRITICAL — obfuscated backdoor + private key exfiltration](./sample-reports/scan-report-20260330.md). The skill writes a Markdown report to `./codescan-reports/scan-report-YYYYMMDD-HHMMSS.md`:
+You can see sample reports here: [SAFE — BHIL toolkit](./sample-reports/scan-report-20260322.md) · [CRITICAL — obfuscated backdoor + private key exfiltration](./sample-reports/scan-report-20260330.md). The skill writes a Markdown report to `./code-scanner-reports/scan-report-YYYYMMDD-HHMMSS.md`:
 
 ```markdown
 # Code Scan Report
@@ -109,26 +109,26 @@ Try asking the tool itself, Claude for example, to install the skill and give it
 **Mac OS / Linux:**
 ```bash
 # Clone and copy the skill into your Claude skills directory
-git clone https://github.com/tkdtaylor/CodeScan /tmp/CodeScan
-cp -r /tmp/CodeScan/code-scanner ~/.claude/skills/
+git clone https://github.com/tkdtaylor/code-scanner /tmp/code-scanner
+cp -r /tmp/code-scanner/code-scanner ~/.claude/skills/
 ```
 
 The dep-scan image builds itself on your first scan. To pre-build it now (optional, saves ~30s on first run):
 
 ```bash
-docker build -t dep-scan:latest -f /tmp/CodeScan/code-scanner/docker/Dockerfile.dep-scan /tmp/CodeScan
+docker build -t dep-scan:latest -f /tmp/code-scanner/code-scanner/docker/Dockerfile.dep-scan /tmp/code-scanner
 ```
 
 **Windows (PowerShell):**
 ```powershell
-git clone https://github.com/tkdtaylor/CodeScan
-Copy-Item -Recurse CodeScan\code-scanner "$env:USERPROFILE\.claude\skills\"
+git clone https://github.com/tkdtaylor/code-scanner
+Copy-Item -Recurse code-scanner\code-scanner "$env:USERPROFILE\.claude\skills\"
 ```
 
 The dep-scan image builds itself on your first scan. To pre-build it now (optional, saves ~30s on first run):
 
 ```powershell
-docker build -t dep-scan:latest -f CodeScan\code-scanner\docker\Dockerfile.dep-scan CodeScan
+docker build -t dep-scan:latest -f code-scanner\code-scanner\docker\Dockerfile.dep-scan code-scanner
 ```
 
 ### Google Antigravity
@@ -225,18 +225,18 @@ The dep-scan image auto-rebuilds when its Dockerfile changes — a SHA256 hash i
 
 ```
 Host machine
-├── ./codescan-reports/        ← report .md files written here (host)
+├── ./code-scanner-reports/        ← report .md files written here (host)
 │   └── scan-report-*.md
 │
-├── /tmp/codescan-review-*/    ← temp dir for Claude Code review (if run)
+├── /tmp/code-scanner-review-*/    ← temp dir for Claude Code review (if run)
 │   └── ...                    ← non-executable copy, deleted after review
 │
-└── Docker volume: codescan-TIMESTAMP  ← all repo content stays here
+└── Docker volume: code-scanner-TIMESTAMP  ← all repo content stays here
     └── /scan/repo/            ← cloned repository (non-executable)
         └── ...                ← never touches the host filesystem
 
-After scan: docker volume rm codescan-TIMESTAMP
-            rm -rf /tmp/codescan-review-*
+After scan: docker volume rm code-scanner-TIMESTAMP
+            rm -rf /tmp/code-scanner-review-*
             → all content permanently deleted
 ```
 
@@ -250,7 +250,7 @@ Each analysis step runs in a container with:
 
 ```
 Host machine
-├── ./codescan-reports/        ← report .md files written here
+├── ./code-scanner-reports/        ← report .md files written here
 │   └── scan-report-*.md
 │
 └── <your local path>          ← SCAN_ROOT — scanned in place, read-only

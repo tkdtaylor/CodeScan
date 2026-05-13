@@ -79,7 +79,7 @@ Interpret results:
 **Skip this step entirely if `LOCAL_MODE=true`.** Just ensure the output directory exists:
 
 ```bash
-OUTPUT_DIR="$(pwd)/codescan-reports"
+OUTPUT_DIR="$(pwd)/code-scanner-reports"
 mkdir -p "$OUTPUT_DIR"
 # SCAN_ROOT was set in Step 1 to the absolute local path
 ```
@@ -87,9 +87,9 @@ mkdir -p "$OUTPUT_DIR"
 For remote targets, create a named Docker volume (repo content stays inside, never touches the host) and a host-side output directory for the report only.
 
 ```bash
-SCAN_ID="codescan-$(date +%s)"
+SCAN_ID="code-scanner-$(date +%s)"
 docker volume create "$SCAN_ID"
-OUTPUT_DIR="$(pwd)/codescan-reports"
+OUTPUT_DIR="$(pwd)/code-scanner-reports"
 mkdir -p "$OUTPUT_DIR"
 ```
 
@@ -273,9 +273,9 @@ The report `.md` file is the only artifact that remains.
 In Claude.ai you cannot run Docker directly. Provide these setup commands for the user to run on their machine:
 
 ```bash
-SCAN_ID="codescan-$(date +%s)"
+SCAN_ID="code-scanner-$(date +%s)"
 docker volume create "$SCAN_ID"
-mkdir -p ./codescan-reports
+mkdir -p ./code-scanner-reports
 docker run --rm --security-opt no-new-privileges \
   -v "${SCAN_ID}:/scan" alpine:latest \
   sh -c "apk add -q git && git clone --depth=1 <URL> /scan/repo && \
